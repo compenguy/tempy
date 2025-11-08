@@ -11,6 +11,9 @@
 #include <bsp/esp-bsp.h>
 #include <esp_err.h>
 #include <esp_log.h>
+#if CONFIG_PM_ENABLE
+#include <esp_pm.h>
+#endif
 #include <esp_matter.h>
 #include <esp_matter_ota.h>
 #include <nvs_flash.h>
@@ -158,6 +161,17 @@ extern "C" void app_main()
 {
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
+
+#if CONFIG_PM_ENABLE
+    esp_pm_config_t pm_config = {
+        .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+        .min_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+        .light_sleep_enable = true
+#endif
+    };
+    err = esp_pm_configure(&pm_config);
+#endif
 
     /* Initialize push button on the dev-kit to reset the device */
     esp_err_t err = factory_reset_button_register();

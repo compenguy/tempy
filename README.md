@@ -2,45 +2,55 @@
 
 ## Sensors
 
-This example demonstrates the integration of temperature and humidity sensors (SHTC3)
-and an occupancy sensor (PIR). 
+This application uses the BME280 sensor function as a matter-enabled temperature and humidity source.
 
-This application creates the temperature sensor, humidity sensor, and occupancy sensor
-on endpoint 1, 2, and 3 respectively.
+This application creates the temperature sensor on endpoint 1, and humidity sensor on endpoint 2.
 
 See the [docs](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html)
 for more information about building and flashing the firmware.
 
 ### Connecting the sensors
 
-- Connecting the SHTC3, temperature and humidity sensor
+- Connecting the BME280, temperature and humidity sensor
 
-| ESP32-C3 Pin | SHTC3 Pin |
-|--------------|-----------|
-| GND          | GND       |
-| 3V3          | VCC       |
-| GPIO 4       | SDA       |
-| GPIO 5       | SCL       |
-
-- Connecting the PIR sensor
-
-| ESP32-C3 Pin | PIR Pin |
-|--------------|---------|
-| GND          | GND     |
-| 3V3          | VCC     |
-| GPIO 7       | Output  |
+| ESP32-H2 Pin | BME280 Pin |
+|--------------|------------|
+| GND          | GND        |
+| 3V3          | VCC        |
+| GPIO 13      | SDA        |
+| GPIO 14      | SCL        |
 
 **_NOTE:_**:
-- Above mentioned wiring connection is configured by default in the example.
+- Above mentioned wiring connection is configured by default in the Kconfig
 - Ensure that the GPIO pins used for the sensors are correctly configured through menuconfig.
 - Modify the configuration parameters as needed for your specific hardware setup.
+
+Be aware that IO10-14, and IO22 are generally the safest to use as the others are typically
+involved in flash communication, USB I/O, UART serial console, or function as strapping pins during
+boot, but consult your board/chip documentation to be sure.
+
+[This page](https://www.espboards.dev/esp32/esp32-h2-super-mini/) has a useful reference for the
+ESP32-H2 Super Mini.
 
 ## Power Management
 
 This project borrows from the esp-matter icd_app example, especially the esp32h2.lit
 configuration to configure long idle time (LIT) features to reduce power usage.
 
+Additional ideas for power reduction are discussed [here](https://tomasmcguinness.com/2025/08/29/matter-low-power-on-an-esp32-h2/).
 
+## Building
+
+Use the included go.sh script to configure, build, flash, or monitor the device over USB.
+
+Examples:
+
+```
+$ ./go.sh --build
+[build output]
+$ ./go.sh --flash --monitor
+[flashing output followed by the serial debug monitor tool]
+```
 
 ## Usage
 
@@ -60,32 +70,3 @@ chip-tool interactive start
 > relativehumiditymeasurement subscribe measured-value 3 10 1 2
 > occupancysensing subscribe occupancy 3 10 1 3
 ```
-
-### 🛠️ Troubleshooting
-
-If you encounter the following runtime error:
-
-`
-i2c: CONFLICT! driver_ng is not allowed to be used with this old driver
-`
-
-This error occurs due to a conflict between the legacy I2C driver and the newer driver model (`driver_ng`).
-
-#### ✅ Solution
-
-Enable the following option via `idf.py menuconfig`:
-
-`CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y`
-
-
-**Important**: This option is only available in the **latest ESP-IDF release branches**:
-
-Pull the latest code from release branches.
-
-- `release/v5.2`
-- `release/v5.3`
-- `release/v5.4`
-- `release/v5.5`
-- `master`
-
-- If you're using an older ESP-IDF version, you can apply this [commit as a patch](https://github.com/espressif/esp-idf/commit/466328cd7e4c90c749a406d2bcee73f782ac0016) to add support manually.
