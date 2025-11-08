@@ -1,4 +1,6 @@
-# Matter Sensors
+# Matter Temperature Sensor
+
+## Sensors
 
 This example demonstrates the integration of temperature and humidity sensors (SHTC3)
 and an occupancy sensor (PIR). 
@@ -9,7 +11,7 @@ on endpoint 1, 2, and 3 respectively.
 See the [docs](https://docs.espressif.com/projects/esp-matter/en/latest/esp32/developing.html)
 for more information about building and flashing the firmware.
 
-## Connecting the sensors
+### Connecting the sensors
 
 - Connecting the SHTC3, temperature and humidity sensor
 
@@ -33,6 +35,13 @@ for more information about building and flashing the firmware.
 - Ensure that the GPIO pins used for the sensors are correctly configured through menuconfig.
 - Modify the configuration parameters as needed for your specific hardware setup.
 
+## Power Management
+
+This project borrows from the esp-matter icd_app example, especially the esp32h2.lit
+configuration to configure long idle time (LIT) features to reduce power usage.
+
+
+
 ## Usage
 
 - Commission the app using Matter controller and read the attributes.
@@ -52,7 +61,7 @@ chip-tool interactive start
 > occupancysensing subscribe occupancy 3 10 1 3
 ```
 
-## 🛠️ Troubleshooting
+### 🛠️ Troubleshooting
 
 If you encounter the following runtime error:
 
@@ -62,7 +71,7 @@ i2c: CONFLICT! driver_ng is not allowed to be used with this old driver
 
 This error occurs due to a conflict between the legacy I2C driver and the newer driver model (`driver_ng`).
 
-### ✅ Solution
+#### ✅ Solution
 
 Enable the following option via `idf.py menuconfig`:
 
