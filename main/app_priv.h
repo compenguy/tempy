@@ -8,6 +8,11 @@
 
 #pragma once
 
+#include <esp_err.h>
+#include <esp_matter.h>
+
+void bme280_app_init(esp_matter::endpoint_t *temp_sensor_ep, esp_matter::endpoint_t *humidity_sensor_ep);
+
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
 #include <platform/ESP32/OpenthreadLauncher.h>
 #include "esp_openthread_types.h"

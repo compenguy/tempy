@@ -12,17 +12,4 @@ menu "Example Configuration"
         help
             GPIO number for I2C master clock
 
-    config BME280_I2C_CSB_PIN
-        int "I2C CSB Pin"
-        default 12
-        help
-            GPIO number for I2C chip select
-
-    config BME280_SPI_SDO_PIN
-        int "SPI SDO Pin"
-        default 11
-        help
-            GPIO number for SPI SDO pin, which is also used to signal to the BME280
-            what bus/protocol it should use
-
 endmenu
