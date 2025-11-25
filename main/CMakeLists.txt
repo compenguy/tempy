@@ -1,5 +1,5 @@
-idf_component_register(SRC_DIRS          "." "driver"
-                       PRIV_INCLUDE_DIRS "." "driver" "${ESP_MATTER_PATH}/examples/common/utils"
+idf_component_register(SRC_DIRS          "."
+                       PRIV_INCLUDE_DIRS "." "${ESP_MATTER_PATH}/examples/common/utils"
                        PRIV_REQUIRES     esp_driver_i2c
                                          esp_matter
                                          app_reset)
