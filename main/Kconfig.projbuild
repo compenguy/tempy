@@ -1,5 +1,22 @@
 menu "Example Configuration"
 
+    config SLEEP_BETWEEN_READINGS
+        bool "Sleep between taking sensor readings"
+        depends on FREERTOS_USE_TICKLESS_IDLE
+        default y
+        help
+            This puts the board into light sleep between taking sensor readings.
+            This will have the effect of disabling serial debug as well.
+
+    config DELAY_BETWEEN_SENSOR_READINGS_MS
+        int "Delay from taking one sensor reading until the next, in milliseconds"
+        default 60000
+        help
+            The time from completing one sensor reading before taking the next one.
+            Lower numbers will provide more frequent updates, while higher numbers will
+            extend the battery life. Recommended values are between 2000 (2 seconds)
+            and 180000 (3 minutes).
+
     config BME280_I2C_SDA_PIN
         int "I2C SDA Pin"
         default 13

@@ -104,19 +104,24 @@ extern "C" void app_main()
     /* Initialize the ESP NVS layer */
     nvs_flash_init();
 
+    esp_err_t err = ESP_OK;
+
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
         .min_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-#if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+#if CONFIG_SLEEP_BETWEEN_READINGS
         .light_sleep_enable = true
+#else
+        .light_sleep_enable = false
 #endif
     };
     err = esp_pm_configure(&pm_config);
+    ABORT_APP_ON_FAILURE(ESP_OK == err, ESP_LOGE(TAG, "Failed to initialize power management, err:%d", err));
 #endif
 
     /* Initialize push button on the dev-kit to reset the device */
-    esp_err_t err = factory_reset_button_register();
+    err = factory_reset_button_register();
     ABORT_APP_ON_FAILURE(ESP_OK == err, ESP_LOGE(TAG, "Failed to initialize reset button, err:%d", err));
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */

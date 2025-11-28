@@ -98,8 +98,9 @@ void i2c_master_init()
 
 void task_bme280_forced_mode(void *ignore) {
     float t, h;
+    // Allow some time for the Matter thread to finish initializing
+    vTaskDelay(pdMS_TO_TICKS(500)); // 500ms or 1/2 second
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(2000)); // 2000 ms update cycle
         esp_err_t err = bme280_read_temp_humidity(&bme, &t, &h);
         if (err == ESP_OK) {
             ESP_LOGI(TAG_BME280, "Temperature:   %.2f C\n", t);
@@ -111,6 +112,7 @@ void task_bme280_forced_mode(void *ignore) {
         } else {
             ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
         }
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DELAY_BETWEEN_SENSOR_READINGS_MS));
     }
 }
 
