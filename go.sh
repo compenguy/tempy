@@ -69,6 +69,7 @@ function activate_esp_matter() {
 
 # Default values for command-line arguments
 ARG_CONFIG=0
+ARG_RECONFIG=0
 ARG_BUILD=0
 ARG_FLASH=0
 ARG_FULL_FLASH=0
@@ -83,6 +84,7 @@ General Arguments:
             		variable options
 Configuration Arguments:
   -c, --menuconfig	invoke idf.py menuconfig
+  -r, --reconfigure	invoke idf.py reconfigure
 Build Arguments:
   -b, --build		invoke idf.py to build the specified target
 Programming Arguments:
@@ -102,6 +104,10 @@ while [[ $# -gt 0 ]]; do
 		-c|--menuconfig)
 			shift
 			ARG_CONFIG=1
+			;;
+		-r|--reconfigure)
+			shift
+			ARG_RECONFIG=1
 			;;
 		-f|--flash)
 			shift
@@ -151,6 +157,14 @@ if [ "${ARG_CONFIG}" -ne 0 ]; then
 	)
 	CONFIG_ACTIVITY=1
 fi
+if [ "${ARG_RECONFIG}" -ne 0 ]; then
+	log "Reconfiguring project..."
+	(
+		cd "${SCRIPT_DIR}"
+		idf.py reconfigure
+	)
+	RECONFIG_ACTIVITY=1
+fi
 if [ "${ARG_BUILD}" -ne 0 ]; then
 	log "Building project..."
 	(
@@ -185,7 +199,7 @@ if [ "${ARG_MONITOR}" -ne 0 ]; then
 fi
 
 # Wrap-up
-if [[ ${CONFIG_ACTIVITY} -eq 0 ]] && [[ ${BUILD_ACTIVITY} -eq 0 ]] && [[ ${FLASH_ACTIVITY} -eq 0 ]] && [[ ${MONITOR_ACTIVITY} ]]; then
+if [[ ${CONFIG_ACTIVITY} -eq 0 ]] && [[ ${RECONFIG_ACTIVITY} -eq 0 ]] && [[ ${BUILD_ACTIVITY} -eq 0 ]] && [[ ${FLASH_ACTIVITY} -eq 0 ]] && [[ ${MONITOR_ACTIVITY} ]]; then
 	usage
 	echo ""
 	echo "Nothing to do! Did you mean to specify --menuconfig, --build, --flash, or --monitor?"
