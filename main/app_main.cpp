@@ -102,14 +102,18 @@ static esp_err_t app_attribute_update_cb(attribute::callback_type_t type, uint16
 extern "C" void app_main()
 {
     /* Initialize the ESP NVS layer */
-    nvs_flash_init();
-
-    esp_err_t err = ESP_OK;
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "NVS partition truncated, erasing...");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
 
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
-        .min_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+        .min_freq_mhz = CONFIG_XTAL_FREQ,  // Allow scaling down to crystal frequency for power savings
 #if CONFIG_SLEEP_BETWEEN_READINGS
         .light_sleep_enable = true
 #else
