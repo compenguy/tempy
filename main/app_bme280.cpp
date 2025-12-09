@@ -15,7 +15,9 @@
 
 #define TAG_BME280 "APP_BME280"
 
-#define ADV_TIME_MS 100
+// Advertising duration per reading. 50ms is enough for 2-3 advertisements
+// at slow intervals, sufficient for nearby receivers to catch the beacon.
+#define ADV_TIME_MS 50
 
 #define I2C_PORT -1 // autoselect
 #define I2C_TIMEOUT -1 // wait forever
@@ -115,8 +117,8 @@ void task_bme280_forced_mode(void *ignore) {
     while (1) {
         esp_err_t err = bme280_read_temp_humidity(&bme, &t, &h);
         if (err == ESP_OK) {
-            ESP_LOGI(TAG_BME280, "Temperature:   %.2f C", t);
-            ESP_LOGI(TAG_BME280, "Humidity   :   %.1f %%RH", h);
+            ESP_LOGD(TAG_BME280, "Temperature:   %.2f C", t);
+            ESP_LOGD(TAG_BME280, "Humidity   :   %.1f %%RH", h);
             beacon_weather_sensor_broadcast(t, h, NAN);
             esp_matter::lock::chip_stack_lock(portMAX_DELAY);
             matter_temp_sensor_notification(temp_endpoint_id, t, NULL);

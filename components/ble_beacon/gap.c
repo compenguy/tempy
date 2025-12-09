@@ -79,9 +79,11 @@ static void start_advertising(void) {
     adv_params.conn_mode = BLE_GAP_CONN_MODE_NON;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
 
-    /* Advertise at a moderate rate to save power (300-400ms interval) */
-    adv_params.itvl_min = BLE_GAP_ADV_FAST_INTERVAL2_MIN;
-    adv_params.itvl_max = BLE_GAP_ADV_FAST_INTERVAL2_MAX;
+    /* Use slow advertising intervals for power savings.
+     * For a non-connectable beacon, we don't need fast discovery.
+     * 20-30ms interval gives ~2-3 advertisements per 50ms window. */
+    adv_params.itvl_min = 32;   // 20ms (32 * 0.625ms)
+    adv_params.itvl_max = 48;   // 30ms (48 * 0.625ms)
 
     /* Start advertising */
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
@@ -91,7 +93,7 @@ static void start_advertising(void) {
         return;
     }
     advertising = true;
-    ESP_LOGI(TAG, "Advertising started successfully as \"%s\"!", DEVICE_NAME);
+    ESP_LOGD(TAG, "Advertising %s started", DEVICE_NAME);
 }
 
 /* Public functions */
@@ -145,13 +147,13 @@ void adv_update_sensor_data(weather_data_t *sensor_data) {
     /* Update manufacturer data with sensor readings - compressed format */
     if (!isnan(sensor_data->temperature)) {
         manufacturer_data.temperature = (int16_t)(sensor_data->temperature * 100); // Scale by 100 to keep 2 decimal places
-        ESP_LOGI(TAG, "Updated temperature data: T=%.2f°C", sensor_data->temperature);
+        ESP_LOGD(TAG, "Updated temperature data: T=%.2f°C", sensor_data->temperature);
     } else {
         manufacturer_data.temperature = 0x7FFF; // Use INT16_MAX as "no reading" sentinel
     }
     if (!isnan(sensor_data->humidity)) {
         manufacturer_data.humidity = (uint8_t)(sensor_data->humidity);             // Integer percentage is sufficient
-        ESP_LOGI(TAG, "Updated humidity data: H=%.0f%%", sensor_data->humidity);
+        ESP_LOGD(TAG, "Updated humidity data: H=%.0f%%", sensor_data->humidity);
     } else {
         manufacturer_data.humidity = 0xFF;
     }
@@ -161,7 +163,7 @@ void adv_update_sensor_data(weather_data_t *sensor_data) {
         uint16_t pressure = (uint16_t)(sensor_data->pressure * 10);  // Convert to hPa/10 to fit in 16 bits
         manufacturer_data.pressure_msb = (pressure >> 8) & 0xFF;
         manufacturer_data.pressure_lsb = pressure & 0xFF;
-        ESP_LOGI(TAG, "Updated pressure data: P=%.1fhPa", sensor_data->pressure);
+        ESP_LOGD(TAG, "Updated pressure data: P=%.1fhPa", sensor_data->pressure);
     } else {
         manufacturer_data.pressure_msb = 0xFF;
         manufacturer_data.pressure_lsb = 0xFF;
@@ -185,7 +187,7 @@ void adv_stop(void) {
     }
 
     advertising = false;
-    ESP_LOGI(TAG, "Advertising stopped");
+    ESP_LOGD(TAG, "Advertising stopped");
 }
 
 int gap_init(void) {
