@@ -175,11 +175,17 @@ esp_err_t bme280_init(bme280_t *bme,
     vTaskDelay(pdMS_TO_TICKS(5));
 
     // Wait for NVM copy to finish
+    /* polling I2C for completion - correct, reliable, and eats up power
     uint8_t status;
     do {
         ESP_RETURN_ON_ERROR(bme280_read_u8(bme, REG_STATUS, &status), TAG, "status");
         vTaskDelay(pdMS_TO_TICKS(2));
     } while (status & 0x01);
+    */
+    // Per BME280 datasheet section 9.1:
+    // T_measure = 1 + (2 * T_osrs) + (2 * P_osrs + 0.5) + (2 * H_osrs + 0.5)
+    //           = 1 + 2 + 2.5 + 2.5 = 8ms typical
+    vTaskDelay(pdMS_TO_TICKS(10));  // Single sleep, no I2C polling
 
     // Read calibration blocks
     uint8_t calib1[26], calib2[7];
