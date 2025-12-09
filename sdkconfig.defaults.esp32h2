@@ -50,12 +50,31 @@ CONFIG_ENABLE_EXTENDED_DISCOVERY=y
 
 # ICD configuration
 CONFIG_ENABLE_ICD_SERVER=y
-CONFIG_ICD_SLOW_POLL_INTERVAL_MS=20000
-CONFIG_ICD_FAST_POLL_INTERVAL_MS=500
-CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=600
-CONFIG_ICD_ACTIVE_MODE_INTERVAL_MS=1000
-CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=5000
+
+# Slow poll: How often device checks Thread network when idle.
+# Increased to 60s to match sensor reading interval - major power savings.
+CONFIG_ICD_SLOW_POLL_INTERVAL_MS=60000
+
+# Fast poll: How often device polls when active (commissioning, recent activity).
+# 200ms provides responsive commissioning without excessive polling.
+CONFIG_ICD_FAST_POLL_INTERVAL_MS=200
+
+# Idle mode interval: Time before transitioning from active to idle mode.
+# Reduced to 30s - device goes idle faster after activity completes.
+CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=30
+
+# Active mode interval: How long device stays awake after sending a message.
+# Reduced to 500ms - enough for response, then back to sleep.
+CONFIG_ICD_ACTIVE_MODE_INTERVAL_MS=500
+
+# Active mode threshold: Minimum active time when woken by external event.
+# Reduced to 1s - quick wake, handle event, return to idle.
+CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=1000
+
+# LIT (Long Idle Time) ICD - enables deep idle states
 CONFIG_ENABLE_ICD_LIT=y
+
+# Subscription limits - 2 is sufficient for most home automation setups
 CONFIG_ICD_CLIENTS_SUPPORTED_PER_FABRIC=2
 CONFIG_ICD_MAX_NOTIFICATION_SUBSCRIBERS=2
 
