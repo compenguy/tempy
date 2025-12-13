@@ -105,10 +105,9 @@ extern "C" void app_main()
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_LOGW(TAG, "NVS partition truncated, erasing...");
-        ESP_ERROR_CHECK(nvs_flash_erase());
+        ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_flash_erase());
         err = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(err);
 
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
@@ -120,33 +119,58 @@ extern "C" void app_main()
         .light_sleep_enable = false
 #endif
     };
-    err = esp_pm_configure(&pm_config);
-    ABORT_APP_ON_FAILURE(ESP_OK == err, ESP_LOGE(TAG, "Failed to initialize power management, err:%d", err));
+
+    ESP_LOGI(TAG, "Initializing power management...");
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_pm_configure(&pm_config));
 #endif
 
     /* Initialize push button on the dev-kit to reset the device */
-    err = factory_reset_button_register();
-    ABORT_APP_ON_FAILURE(ESP_OK == err, ESP_LOGE(TAG, "Failed to initialize reset button, err:%d", err));
+    ESP_LOGI(TAG, "Initializing reset button...");
+    ESP_ERROR_CHECK_WITHOUT_ABORT(factory_reset_button_register());
 
     /* Create a Matter node and add the mandatory Root Node device type on endpoint 0 */
     node::config_t node_config;
-    node_t *node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
-    ABORT_APP_ON_FAILURE(node != nullptr, ESP_LOGE(TAG, "Failed to create Matter node"));
+    node_t *node = nullptr;
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Creating Matter node...");
+        node = node::create(&node_config, app_attribute_update_cb, app_identification_cb);
+        if (node == nullptr) {
+            err = ESP_FAIL;
+            ESP_LOGE(TAG, "Failed to create Matter node");
+        }
+    }
 
     // add temperature sensor device
     temperature_sensor::config_t temp_sensor_config;
-    endpoint_t * temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
-    ABORT_APP_ON_FAILURE(temp_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create temperature_sensor endpoint"));
+    endpoint_t * temp_sensor_ep = nullptr;
+    if (err == ESP_OK && node != nullptr) {
+        ESP_LOGI(TAG, "Registering temperature sensor Matter endpoint...");
+        temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+        if (temp_sensor_ep == nullptr) {
+            err = ESP_FAIL;
+            ESP_LOGE(TAG, "Failed to create temperature sensor endpoint");
+        }
+    }
+
 
     // add the humidity sensor device
     humidity_sensor::config_t humidity_sensor_config;
-    endpoint_t * humidity_sensor_ep = humidity_sensor::create(node, &humidity_sensor_config, ENDPOINT_FLAG_NONE, NULL);
-    ABORT_APP_ON_FAILURE(humidity_sensor_ep != nullptr, ESP_LOGE(TAG, "Failed to create humidity_sensor endpoint"));
+    endpoint_t * humidity_sensor_ep = nullptr;
+    if (err == ESP_OK && node != nullptr) {
+        ESP_LOGI(TAG, "Registering humidity sensor Matter endpoint...");
+        humidity_sensor_ep = humidity_sensor::create(node, &humidity_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+        if (humidity_sensor_ep == nullptr) {
+            err = ESP_FAIL;
+            ESP_LOGE(TAG, "Failed to create humidity sensor endpoint");
+        }
+    }
 
+    ESP_LOGI(TAG, "Starting bme280 temperature/humidity sensor...");
     bme280_app_init(temp_sensor_ep, humidity_sensor_ep);
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
     /* Set OpenThread platform config */
+    ESP_LOGI(TAG, "Starting Thread networking...");
     esp_openthread_platform_config_t config = {
         .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
         .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
@@ -156,6 +180,9 @@ extern "C" void app_main()
 #endif
 
     /* Matter start */
-    err = esp_matter::start(app_event_cb);
-    ABORT_APP_ON_FAILURE(err == ESP_OK, ESP_LOGE(TAG, "Failed to start Matter, err:%d", err));
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Starting Matter framework...");
+        err = esp_matter::start(app_event_cb);
+        ESP_ERROR_CHECK_WITHOUT_ABORT(err);
+    }
 }
