@@ -20,10 +20,9 @@
 #define ADV_TIME_MS 50
 
 #define I2C_PORT -1 // autoselect
-#define I2C_TIMEOUT -1 // wait forever
 
-#define I2C_BME_ADDRESS 0x76 // default for device
-#define I2C_BME_CLK_FREQ 100000
+#define I2C_BME_ADDRESS CONFIG_BME280_I2C_ADDRESS
+#define I2C_BME_CLK_FREQ 50000
 
 // esp i2c handles
 static i2c_master_bus_handle_t bus_handle;
@@ -41,51 +40,66 @@ using namespace chip::app::Clusters;
 // Application cluster specification, 7.18.2.11. Temperature
 // represents a temperature on the Celsius scale with a resolution of 0.01°C.
 // temp = (temperature in °C) x 100
-static void matter_temp_sensor_notification(uint16_t endpoint_id, float temp, void *user_data)
+static void matter_temp_sensor_notification(uint16_t endpoint_id, float temp)
 {
-    // schedule the attribute update so that we can report it from matter thread
+    // Schedule the attribute update onto the Matter thread. ScheduleLambda is
+    // thread-safe, so we intentionally do not take chip_stack_lock here.
     chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id, temp]() {
-        attribute_t * attribute = attribute::get(endpoint_id,
-                                                 TemperatureMeasurement::Id,
-                                                 TemperatureMeasurement::Attributes::MeasuredValue::Id);
+        attribute_t *attribute = attribute::get(endpoint_id,
+                                                TemperatureMeasurement::Id,
+                                                TemperatureMeasurement::Attributes::MeasuredValue::Id);
+        if (attribute == nullptr) {
+            ESP_LOGW(TAG_BME280, "Temperature attribute not found on endpoint %u", endpoint_id);
+            return;
+        }
 
-        esp_matter_attr_val_t val = esp_matter_invalid(NULL);
+        esp_matter_attr_val_t val = esp_matter_invalid(nullptr);
         attribute::get_val(attribute, &val);
         val.val.i16 = static_cast<int16_t>(temp * 100);
 
-        attribute::update(endpoint_id, TemperatureMeasurement::Id, TemperatureMeasurement::Attributes::MeasuredValue::Id, &val);
+        attribute::update(endpoint_id, TemperatureMeasurement::Id,
+                          TemperatureMeasurement::Attributes::MeasuredValue::Id, &val);
     });
 }
 
 // Application cluster specification, 2.6.4.1. MeasuredValue Attribute
 // represents the humidity in percent.
 // humidity = (humidity in %) x 100
-static void matter_humidity_sensor_notification(uint16_t endpoint_id, float humidity, void *user_data)
+static void matter_humidity_sensor_notification(uint16_t endpoint_id, float humidity)
 {
-    // schedule the attribute update so that we can report it from matter thread
+    // Schedule the attribute update onto the Matter thread. See note above.
     chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id, humidity]() {
-        attribute_t * attribute = attribute::get(endpoint_id,
-                                                 RelativeHumidityMeasurement::Id,
-                                                 RelativeHumidityMeasurement::Attributes::MeasuredValue::Id);
+        attribute_t *attribute = attribute::get(endpoint_id,
+                                                RelativeHumidityMeasurement::Id,
+                                                RelativeHumidityMeasurement::Attributes::MeasuredValue::Id);
+        if (attribute == nullptr) {
+            ESP_LOGW(TAG_BME280, "Humidity attribute not found on endpoint %u", endpoint_id);
+            return;
+        }
 
-        esp_matter_attr_val_t val = esp_matter_invalid(NULL);
+        esp_matter_attr_val_t val = esp_matter_invalid(nullptr);
         attribute::get_val(attribute, &val);
         val.val.u16 = static_cast<uint16_t>(humidity * 100);
 
-        attribute::update(endpoint_id, RelativeHumidityMeasurement::Id, RelativeHumidityMeasurement::Attributes::MeasuredValue::Id, &val);
+        attribute::update(endpoint_id, RelativeHumidityMeasurement::Id,
+                          RelativeHumidityMeasurement::Attributes::MeasuredValue::Id, &val);
     });
 }
 
 static void beacon_weather_sensor_broadcast(float temperature, float humidity, float pressure)
 {
-    weather_data_t sensor_data;
-    sensor_data.temperature = temperature;
-    sensor_data.humidity = humidity;
-    sensor_data.pressure = pressure;
-    ESP_ERROR_CHECK(ble_beacon_start(&sensor_data, ADV_TIME_MS));
+    weather_data_t sensor_data = {
+        .temperature = temperature,
+        .humidity = humidity,
+        .pressure = pressure,
+    };
+    esp_err_t err = ble_beacon_start(&sensor_data, ADV_TIME_MS);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_BME280, "BLE beacon broadcast failed: %s", esp_err_to_name(err));
+    }
 }
 
-void i2c_master_init()
+static void i2c_master_init(void)
 {
     // Create I2C master bus
     i2c_master_bus_config_t i2c_mst_config = {
@@ -106,24 +120,31 @@ void i2c_master_init()
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
 
     // Probe for BME device on bus before continuing
-    ESP_LOGI(TAG_BME280, "Probing for BME280 on I2C bus at %02X", I2C_BME_ADDRESS);
-    ESP_ERROR_CHECK(i2c_master_probe(bus_handle, I2C_BME_ADDRESS, -1));
+    ESP_LOGI(TAG_BME280, "Probing for BME280 on I2C bus at 0x%02X...", I2C_BME_ADDRESS);
+    esp_err_t probe_err = i2c_master_probe(bus_handle, I2C_BME_ADDRESS, 100);
+    if (probe_err != ESP_OK) {
+        ESP_LOGE(TAG_BME280, "BME280 not found at 0x%02X! Check wiring (SDA=%d, SCL=%d). Error: %s",
+                 I2C_BME_ADDRESS, CONFIG_BME280_I2C_SDA_PIN, CONFIG_BME280_I2C_SCL_PIN,
+                 esp_err_to_name(probe_err));
+        ESP_ERROR_CHECK(probe_err);
+    }
+    ESP_LOGI(TAG_BME280, "BME280 detected on I2C bus");
 }
 
-void task_bme280_forced_mode(void *ignore) {
+static void task_bme280_forced_mode(void *ignore)
+{
     float t, h;
-    // Allow some time for the Matter thread to finish initializing
-    vTaskDelay(pdMS_TO_TICKS(500)); // 500ms or 1/2 second
+    // Allow some time for the Matter thread to finish initializing before
+    // scheduling the first attribute update.
+    vTaskDelay(pdMS_TO_TICKS(500));
     while (1) {
         esp_err_t err = bme280_read_temp_humidity(&bme, &t, &h);
         if (err == ESP_OK) {
-            ESP_LOGD(TAG_BME280, "Temperature:   %.2f C", t);
-            ESP_LOGD(TAG_BME280, "Humidity   :   %.1f %%RH", h);
+            ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
+            ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
             beacon_weather_sensor_broadcast(t, h, NAN);
-            esp_matter::lock::chip_stack_lock(portMAX_DELAY);
-            matter_temp_sensor_notification(temp_endpoint_id, t, NULL);
-            matter_humidity_sensor_notification(humidity_endpoint_id, h, NULL);
-            esp_matter::lock::chip_stack_unlock();
+            matter_temp_sensor_notification(temp_endpoint_id, t);
+            matter_humidity_sensor_notification(humidity_endpoint_id, h);
         } else {
             ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
         }
@@ -147,6 +168,10 @@ void bme280_app_init(endpoint_t *temp_sensor_ep, endpoint_t *humidity_sensor_ep)
     ESP_ERROR_CHECK(bme280_init(&bme, bus_handle, I2C_BME_ADDRESS, I2C_BME_CLK_FREQ));
 
     ESP_LOGI(TAG_BME280, "Scheduling BME280 to take regular readings...");
-    xTaskCreate(&task_bme280_forced_mode, "bme280_forced_mode",  3072, NULL, 6, NULL);
+    BaseType_t rc = xTaskCreate(&task_bme280_forced_mode, "bme280_forced_mode",
+                                3072, nullptr, 6, nullptr);
+    if (rc != pdPASS) {
+        ESP_LOGE(TAG_BME280, "Failed to create BME280 task (rc=%d)", (int)rc);
+    }
 }
 

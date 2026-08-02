@@ -3,7 +3,7 @@ menu "Example Configuration"
     config SLEEP_BETWEEN_READINGS
         bool "Sleep between taking sensor readings"
         depends on FREERTOS_USE_TICKLESS_IDLE
-        default y
+        default n
         help
             This puts the board into light sleep between taking sensor readings.
             This will have the effect of disabling serial debug as well.
@@ -28,5 +28,12 @@ menu "Example Configuration"
         default 14
         help
             GPIO number for I2C master clock
+
+    config BME280_I2C_ADDRESS
+        hex "BME280 I2C address"
+        default 0x76
+        help
+            7-bit I2C address for the BME280. Many modules use 0x76 when SDO
+            is pulled low and 0x77 when SDO is pulled high.
 
 endmenu

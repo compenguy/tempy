@@ -37,23 +37,65 @@ static const char *TAG = "BME280";
 #define OSRS_8X   0x04
 #define OSRS_16X  0x05
 
+#define BME280_TEMP_OSRS  OSRS_1X
+#define BME280_PRESS_OSRS OSRS_1X
+#define BME280_HUM_OSRS   OSRS_1X
+
 // --------- I2C helpers ----------
+// I2C timeout in milliseconds - avoid hanging forever if sensor not connected
+#define I2C_TIMEOUT_MS 100
+#define RESET_COPY_TIMEOUT_MS 20
+#define STATUS_POLL_INTERVAL_MS 2
+
 static esp_err_t bme280_write(bme280_t *bme, uint8_t reg, uint8_t val)
 {
     uint8_t buf[2] = { reg, val };
-    return i2c_master_transmit(bme->dev, buf, sizeof(buf), -1);
+    return i2c_master_transmit(bme->dev, buf, sizeof(buf), I2C_TIMEOUT_MS);
 }
 
 static esp_err_t bme280_read(bme280_t *bme, uint8_t reg, uint8_t *data, size_t len)
 {
-    esp_err_t err = i2c_master_transmit(bme->dev, &reg, 1, -1);
-    if (err != ESP_OK) return err;
-    return i2c_master_receive(bme->dev, data, len, -1);
+    return i2c_master_transmit_receive(bme->dev, &reg, 1, data, len, I2C_TIMEOUT_MS);
 }
 
 static esp_err_t bme280_read_u8(bme280_t *bme, uint8_t reg, uint8_t *val)
 {
     return bme280_read(bme, reg, val, 1);
+}
+
+static uint32_t bme280_osrs_multiplier(uint8_t osrs)
+{
+    switch (osrs) {
+    case OSRS_1X:
+        return 1;
+    case OSRS_2X:
+        return 2;
+    case OSRS_4X:
+        return 4;
+    case OSRS_8X:
+        return 8;
+    case OSRS_16X:
+        return 16;
+    case OSRS_SKIP:
+    default:
+        return 0;
+    }
+}
+
+static uint32_t bme280_forced_measurement_timeout_ms(void)
+{
+    const uint32_t temp_osrs = bme280_osrs_multiplier(BME280_TEMP_OSRS);
+    const uint32_t press_osrs = bme280_osrs_multiplier(BME280_PRESS_OSRS);
+    const uint32_t hum_osrs = bme280_osrs_multiplier(BME280_HUM_OSRS);
+
+    // Datasheet formula in microseconds:
+    // 1250 + 2300*T + (2300*P + 575) + (2300*H + 575).
+    const uint32_t measurement_us = 1250
+                                  + (2300 * temp_osrs)
+                                  + (press_osrs ? (2300 * press_osrs + 575) : 0)
+                                  + (hum_osrs ? (2300 * hum_osrs + 575) : 0);
+
+    return (measurement_us + 999) / 1000 + STATUS_POLL_INTERVAL_MS;
 }
 
 // --------- Calibration parsing ----------
@@ -172,20 +214,21 @@ esp_err_t bme280_init(bme280_t *bme,
 
     // Soft reset
     ESP_RETURN_ON_ERROR(bme280_write(bme, REG_RESET, RESET_CMD), TAG, "reset");
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pdMS_TO_TICKS(STATUS_POLL_INTERVAL_MS));
 
-    // Wait for NVM copy to finish
-    /* polling I2C for completion - correct, reliable, and eats up power
-    uint8_t status;
-    do {
+    // Wait for reset-time NVM calibration copy to finish, but never forever.
+    uint8_t status = 0;
+    for (uint32_t waited_ms = 0; waited_ms <= RESET_COPY_TIMEOUT_MS; waited_ms += STATUS_POLL_INTERVAL_MS) {
         ESP_RETURN_ON_ERROR(bme280_read_u8(bme, REG_STATUS, &status), TAG, "status");
-        vTaskDelay(pdMS_TO_TICKS(2));
-    } while (status & 0x01);
-    */
-    // Per BME280 datasheet section 9.1:
-    // T_measure = 1 + (2 * T_osrs) + (2 * P_osrs + 0.5) + (2 * H_osrs + 0.5)
-    //           = 1 + 2 + 2.5 + 2.5 = 8ms typical
-    vTaskDelay(pdMS_TO_TICKS(10));  // Single sleep, no I2C polling
+        if ((status & 0x01) == 0) {
+            break;
+        }
+        if (waited_ms + STATUS_POLL_INTERVAL_MS > RESET_COPY_TIMEOUT_MS) {
+            ESP_LOGE(TAG, "Timed out waiting for NVM copy after reset");
+            return ESP_ERR_TIMEOUT;
+        }
+        vTaskDelay(pdMS_TO_TICKS(STATUS_POLL_INTERVAL_MS));
+    }
 
     // Read calibration blocks
     uint8_t calib1[26], calib2[7];
@@ -194,13 +237,13 @@ esp_err_t bme280_init(bme280_t *bme,
     parse_calib(&bme->calib, calib1, calib2);
 
     // Humidity oversampling must be written before ctrl_meas
-    ESP_RETURN_ON_ERROR(bme280_write(bme, REG_CTRL_HUM, OSRS_1X), TAG, "ctrl_hum");
+    ESP_RETURN_ON_ERROR(bme280_write(bme, REG_CTRL_HUM, BME280_HUM_OSRS), TAG, "ctrl_hum");
 
     // Standby/filter config (doesn't matter in forced mode much)
     ESP_RETURN_ON_ERROR(bme280_write(bme, REG_CONFIG, 0x00), TAG, "config");
 
     // Temp oversampling 1x, Press oversampling 1x (ignored), sleep mode for now
-    uint8_t ctrl_meas = (OSRS_1X << 5) | (OSRS_1X << 2) | MODE_SLEEP;
+    uint8_t ctrl_meas = (BME280_TEMP_OSRS << 5) | (BME280_PRESS_OSRS << 2) | MODE_SLEEP;
     ESP_RETURN_ON_ERROR(bme280_write(bme, REG_CTRL_MEAS, ctrl_meas), TAG, "ctrl_meas");
 
     ESP_LOGI(TAG, "BME280 init OK @0x%02X", i2c_addr);
@@ -210,15 +253,23 @@ esp_err_t bme280_init(bme280_t *bme,
 esp_err_t bme280_read_temp_humidity(bme280_t *bme, float *temp_c, float *rh)
 {
     // Trigger forced measurement:
-    uint8_t ctrl_meas = (OSRS_1X << 5) | (OSRS_1X << 2) | MODE_FORCED;
+    uint8_t ctrl_meas = (BME280_TEMP_OSRS << 5) | (BME280_PRESS_OSRS << 2) | MODE_FORCED;
     ESP_RETURN_ON_ERROR(bme280_write(bme, REG_CTRL_MEAS, ctrl_meas), TAG, "start forced");
 
     // Wait until measuring bit clears
-    uint8_t status;
-    do {
+    uint8_t status = 0;
+    const uint32_t measurement_timeout_ms = bme280_forced_measurement_timeout_ms();
+    for (uint32_t waited_ms = 0; waited_ms <= measurement_timeout_ms; waited_ms += STATUS_POLL_INTERVAL_MS) {
         ESP_RETURN_ON_ERROR(bme280_read_u8(bme, REG_STATUS, &status), TAG, "status");
-        vTaskDelay(pdMS_TO_TICKS(2));
-    } while (status & 0x08);
+        if ((status & 0x08) == 0) {
+            break;
+        }
+        if (waited_ms + STATUS_POLL_INTERVAL_MS > measurement_timeout_ms) {
+            ESP_LOGE(TAG, "Timed out waiting for forced measurement");
+            return ESP_ERR_TIMEOUT;
+        }
+        vTaskDelay(pdMS_TO_TICKS(STATUS_POLL_INTERVAL_MS));
+    }
 
     // Read data burst (press[3], temp[3], hum[2]) = 8 bytes
     uint8_t data[8];

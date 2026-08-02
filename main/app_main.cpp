@@ -32,7 +32,7 @@ using namespace chip::app::Clusters;
 static esp_err_t factory_reset_button_register()
 {
     button_handle_t push_button;
-    esp_err_t err = bsp_iot_button_create(&push_button, NULL, BSP_BUTTON_NUM);
+    esp_err_t err = bsp_iot_button_create(&push_button, nullptr, BSP_BUTTON_NUM);
     VerifyOrReturnError(err == ESP_OK, err);
     return app_reset_button_register(push_button);
 }
@@ -42,7 +42,7 @@ static void open_commissioning_window_if_necessary()
     VerifyOrReturn(chip::Server::GetInstance().GetFabricTable().FabricCount() == 0);
 
     chip::CommissioningWindowManager & commissionMgr = chip::Server::GetInstance().GetCommissioningWindowManager();
-    VerifyOrReturn(commissionMgr.IsCommissioningWindowOpen() == false);
+    VerifyOrReturn(!commissionMgr.IsCommissioningWindowOpen());
 
     // After removing last fabric, this example does not remove the Wi-Fi credentials
     // and still has IP connectivity so, only advertising on DNS-SD.
@@ -109,6 +109,8 @@ extern "C" void app_main()
         err = nvs_flash_init();
     }
 
+    // usb serial log output seems to be slow to start, so we'll delay a bit
+    vTaskDelay(pdMS_TO_TICKS(100));
 #if CONFIG_PM_ENABLE
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
@@ -121,6 +123,9 @@ extern "C" void app_main()
     };
 
     ESP_LOGI(TAG, "Initializing power management...");
+#if CONFIG_SLEEP_BETWEEN_READINGS
+    ESP_LOGW(TAG, "Device uses sleep. Serial debug output will be unreliable.");
+#endif
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_pm_configure(&pm_config));
 #endif
 
@@ -142,23 +147,22 @@ extern "C" void app_main()
 
     // add temperature sensor device
     temperature_sensor::config_t temp_sensor_config;
-    endpoint_t * temp_sensor_ep = nullptr;
+    endpoint_t *temp_sensor_ep = nullptr;
     if (err == ESP_OK && node != nullptr) {
         ESP_LOGI(TAG, "Registering temperature sensor Matter endpoint...");
-        temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+        temp_sensor_ep = temperature_sensor::create(node, &temp_sensor_config, ENDPOINT_FLAG_NONE, nullptr);
         if (temp_sensor_ep == nullptr) {
             err = ESP_FAIL;
             ESP_LOGE(TAG, "Failed to create temperature sensor endpoint");
         }
     }
 
-
     // add the humidity sensor device
     humidity_sensor::config_t humidity_sensor_config;
-    endpoint_t * humidity_sensor_ep = nullptr;
+    endpoint_t *humidity_sensor_ep = nullptr;
     if (err == ESP_OK && node != nullptr) {
         ESP_LOGI(TAG, "Registering humidity sensor Matter endpoint...");
-        humidity_sensor_ep = humidity_sensor::create(node, &humidity_sensor_config, ENDPOINT_FLAG_NONE, NULL);
+        humidity_sensor_ep = humidity_sensor::create(node, &humidity_sensor_config, ENDPOINT_FLAG_NONE, nullptr);
         if (humidity_sensor_ep == nullptr) {
             err = ESP_FAIL;
             ESP_LOGE(TAG, "Failed to create humidity sensor endpoint");
@@ -169,9 +173,11 @@ extern "C" void app_main()
     bme280_app_init(temp_sensor_ep, humidity_sensor_ep);
 
 #if CHIP_DEVICE_CONFIG_ENABLE_THREAD
-    /* Set OpenThread platform config */
+    /* Set OpenThread platform config.
+     * set_openthread_platform_config stores the pointer, so this must outlive
+     * the OpenThread stack -- static storage is required. */
     ESP_LOGI(TAG, "Starting Thread networking...");
-    esp_openthread_platform_config_t config = {
+    static esp_openthread_platform_config_t config = {
         .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
         .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
         .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
