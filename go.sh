@@ -12,7 +12,8 @@ ESP_IDF_VERSION="v5.5.1"
 ESP_MATTER_DIR="${HOME}/.local/share/matter/esp-matter"
 ESP_TARGET="esp32h2"
 ESP_SERIAL="/dev/ttyACM0"
-[ -n "${ESP_SERIAL}" ] && ESP_SERIAL_ARG="-p ${ESP_SERIAL}"
+ESP_SERIAL_ARG=()
+[ -n "${ESP_SERIAL}" ] && ESP_SERIAL_ARG=(-p "${ESP_SERIAL}")
 
 function init_esp_idf() {
 	(
@@ -72,6 +73,7 @@ ARG_CONFIG=0
 ARG_RECONFIG=0
 ARG_BUILD=0
 ARG_FLASH=0
+ARG_FULLCLEAN=0
 ARG_FULL_FLASH=0
 ARG_MONITOR=0
 
@@ -83,6 +85,7 @@ General Arguments:
   -h, --help		explanation of command line argument and environment
             		variable options
 Configuration Arguments:
+      --full-clean	invoke idf.py fullclean
   -c, --menuconfig	invoke idf.py menuconfig
   -r, --reconfigure	invoke idf.py reconfigure
 Build Arguments:
@@ -113,6 +116,10 @@ while [[ $# -gt 0 ]]; do
 			shift
 			ARG_FLASH=1
 			;;
+		--full-clean)
+			shift
+			ARG_FULLCLEAN=1
+			;;
 		-F|--full-flash)
 			shift
 			ARG_FULL_FLASH=1
@@ -124,19 +131,18 @@ while [[ $# -gt 0 ]]; do
 		-h|--help)
 			usage
 			exit 0
-			shift
 			;;
 		*)
 			usage
 			echo ""
 			die "Unrecognized argument '$1'"
-			shift
 			;;
 	esac
 done
 
 # Task tracking variables
 CONFIG_ACTIVITY=0
+RECONFIG_ACTIVITY=0
 BUILD_ACTIVITY=0
 FLASH_ACTIVITY=0
 MONITOR_ACTIVITY=0
@@ -149,6 +155,14 @@ echo "Task(s) starting at $(date --rfc-3339=seconds)"
 echo "Configured build settings:"
 echo "    ESP target=${ESP_TARGET}"
 echo "    esp-idf version=${ESP_IDF_VERSION}"
+if [ "${ARG_FULLCLEAN}" -ne 0 ]; then
+	log "Cleaning project..."
+	(
+		cd "${SCRIPT_DIR}"
+		idf.py fullclean
+	)
+	CONFIG_ACTIVITY=1
+fi
 if [ "${ARG_CONFIG}" -ne 0 ]; then
 	log "Configuring project..."
 	(
@@ -177,7 +191,7 @@ if [ "${ARG_FLASH}" -ne 0 ]; then
 	log "Flashing project..."
 	(
 		cd "${SCRIPT_DIR}"
-		idf.py ${ESP_SERIAL_ARG} flash
+		idf.py "${ESP_SERIAL_ARG[@]}" flash
 	)
 	FLASH_ACTIVITY=1
 fi
@@ -185,21 +199,22 @@ if [ "${ARG_FULL_FLASH}" -ne 0 ]; then
 	log "Full-storage flashing project..."
 	(
 		cd "${SCRIPT_DIR}"
-		idf.py ${ESP_SERIAL_ARG} erase_flash
+		idf.py "${ESP_SERIAL_ARG[@]}" erase_flash
+		idf.py "${ESP_SERIAL_ARG[@]}" flash
 	)
 	FLASH_ACTIVITY=1
 fi
 if [ "${ARG_MONITOR}" -ne 0 ]; then
-	log "Flashing project..."
+	log "Monitoring device..."
 	(
 		cd "${SCRIPT_DIR}"
-		idf.py ${ESP_SERIAL_ARG} monitor
+		idf.py "${ESP_SERIAL_ARG[@]}" monitor
 	)
 	MONITOR_ACTIVITY=1
 fi
 
 # Wrap-up
-if [[ ${CONFIG_ACTIVITY} -eq 0 ]] && [[ ${RECONFIG_ACTIVITY} -eq 0 ]] && [[ ${BUILD_ACTIVITY} -eq 0 ]] && [[ ${FLASH_ACTIVITY} -eq 0 ]] && [[ ${MONITOR_ACTIVITY} ]]; then
+if [[ ${CONFIG_ACTIVITY} -eq 0 ]] && [[ ${RECONFIG_ACTIVITY} -eq 0 ]] && [[ ${BUILD_ACTIVITY} -eq 0 ]] && [[ ${FLASH_ACTIVITY} -eq 0 ]] && [[ ${MONITOR_ACTIVITY} -eq 0 ]]; then
 	usage
 	echo ""
 	echo "Nothing to do! Did you mean to specify --menuconfig, --build, --flash, or --monitor?"
