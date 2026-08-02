@@ -2,8 +2,10 @@
 #include "gap.h"
 #include "common.h"
 
+static const char *TAG = "BLE_Beacon";
+
 /* Private function declarations */
-inline static void format_addr(char *addr_str, uint8_t addr[]);
+static inline void format_addr(char *addr_str, size_t addr_str_len, const uint8_t addr[]);
 static void start_advertising(void);
 
 /* Private variables */
@@ -15,7 +17,7 @@ static bool advertising = false;
 static const ble_uuid16_t gatt_svr_svc_temp_uuid = BLE_UUID16_INIT(0x181A);
 
 /* Manufacturer-specific data structure - reduced size to avoid exceeding BLE limits */
-struct __attribute__((packed)) {
+static struct __attribute__((packed)) {
     uint16_t company_id;      // 0x02E5 for Espressif
     uint8_t  data_type;       // Data type identifier (0x01)
     int16_t  temperature;     // Temperature value (scaled)
@@ -28,9 +30,9 @@ struct __attribute__((packed)) {
 };
 
 /* Private functions */
-inline static void format_addr(char *addr_str, uint8_t addr[]) {
-    sprintf(addr_str, "%02X:%02X:%02X:%02X:%02X:%02X", addr[0], addr[1],
-            addr[2], addr[3], addr[4], addr[5]);
+static inline void format_addr(char *addr_str, size_t addr_str_len, const uint8_t addr[]) {
+    snprintf(addr_str, addr_str_len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 }
 
 static void start_advertising(void) {
@@ -122,7 +124,7 @@ void adv_init(void) {
         ESP_LOGE(TAG, "Failed to copy device address, error code: %d", rc);
         return;
     }
-    format_addr(addr_str, addr_val);
+    format_addr(addr_str, sizeof(addr_str), addr_val);
     ESP_LOGI(TAG, "Device address: %s", addr_str);
 
     /* Start advertising. */

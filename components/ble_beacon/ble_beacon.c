@@ -2,6 +2,8 @@
 #include "common.h"
 #include "gap.h"
 
+static const char *TAG = "BLE_Beacon";
+
 /* Library function declarations */
 void ble_store_config_init(void);
 

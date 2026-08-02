@@ -30,13 +30,12 @@ extern "C" {
 
 /* Defines */
 #define DEVICE_NAME "Tempy"
-#define TAG "BLE_Beacon"
 
 /* BLE Appearance Values */
 #define BLE_APPEARANCE_GENERIC_THERMOMETER 0x0300
 
 /* Sensor data structure */
-typedef struct weather_data_t {
+typedef struct {
     float temperature; // degrees C, use NAN for no reading
     float humidity; // percent, use NAN for no reading
     float pressure; // hPa, use NAN for no reading
