@@ -3,10 +3,9 @@
 ## Sensors
 
 This application uses the BME280 sensor as a Matter-enabled temperature and
-humidity source. Readings can also be broadcast as manufacturer-specific data
-in a BLE advertisement for non-Matter receivers on the same network; this
-side-channel is controlled by the `ENABLE_BLE_BEACON` option in menuconfig
-(enabled by default).
+humidity source. Readings are published as Matter attribute updates over
+Thread; the initial commissioning happens over BLE (CHIPoBLE) and BLE is
+released once commissioning completes.
 
 This application creates the temperature sensor on endpoint 1, and the
 humidity sensor on endpoint 2.

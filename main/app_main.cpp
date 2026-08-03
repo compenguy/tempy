@@ -67,23 +67,11 @@ static void app_event_cb(const ChipDeviceEvent *event, intptr_t arg)
 
     case chip::DeviceLayer::DeviceEventType::kFabricRemoved:
         ESP_LOGI(TAG, "Fabric removed successfully");
-#if CONFIG_TEMPY_ENABLE_BLE_BEACON
-        // If a controller RemoveFabric-s us (as opposed to a hard factory
-        // reset via the button, which reboots), Matter is about to bring
-        // CHIPoBLE back up so a new fabric can be added. Release the BLE
-        // stack so it isn't already owned by our beacon.
-        bme280_beacon_disable();
-#endif
         open_commissioning_window_if_necessary();
         break;
 
     case chip::DeviceLayer::DeviceEventType::kBLEDeinitialized:
         ESP_LOGI(TAG, "BLE deinitialized and memory reclaimed");
-#if CONFIG_TEMPY_ENABLE_BLE_BEACON
-        // CHIP has released the BLE controller now that commissioning is
-        // done; safe for our weather beacon to take it over.
-        bme280_beacon_enable();
-#endif
         break;
 
     default:
@@ -214,33 +202,4 @@ extern "C" void app_main()
         err = esp_matter::start(app_event_cb);
         ESP_ERROR_CHECK_WITHOUT_ABORT(err);
     }
-
-#if CONFIG_TEMPY_ENABLE_BLE_BEACON
-    // If we're booting on an already-commissioned device, CHIPoBLE will
-    // not start (there is no need for BLE commissioning) and therefore
-    // kBLEDeinitialized won't fire. Bring up the beacon here in that
-    // case. Take the CHIP stack lock to read the fabric table safely.
-    if (err == ESP_OK) {
-        esp_matter::lock::status_t lock_rc =
-            esp_matter::lock::chip_stack_lock(portMAX_DELAY);
-        if (lock_rc != esp_matter::lock::FAILED) {
-            uint8_t fabric_count = chip::Server::GetInstance()
-                                       .GetFabricTable()
-                                       .FabricCount();
-            if (lock_rc == esp_matter::lock::SUCCESS) {
-                esp_matter::lock::chip_stack_unlock();
-            }
-            if (fabric_count > 0) {
-                ESP_LOGI(TAG,
-                         "Device already commissioned (%u fabric%s); enabling BLE beacon",
-                         fabric_count, fabric_count == 1 ? "" : "s");
-                bme280_beacon_enable();
-            } else {
-                ESP_LOGI(TAG, "No fabrics yet; beacon will start after commissioning");
-            }
-        } else {
-            ESP_LOGW(TAG, "Could not query fabric count; leaving beacon disabled");
-        }
-    }
-#endif // CONFIG_TEMPY_ENABLE_BLE_BEACON
 }
