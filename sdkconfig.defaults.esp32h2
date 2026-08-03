@@ -3,7 +3,10 @@ CONFIG_IDF_TARGET="esp32h2"
 # Enable BLE sleep
 CONFIG_BT_LE_SLEEP_ENABLE=y
 CONFIG_BT_LE_LP_CLK_SRC_MAIN_XTAL=y
-CONFIG_RTC_CLK_SRC_EXT_CRYS=n
+# RTC clock source is a Kconfig choice; the H2's default is
+# RTC_CLK_SRC_INT_RC (internal 136 kHz RC), which is what we want when the
+# module has no external 32 kHz crystal. Set another RTC_CLK_SRC_* to y
+# here only if you need a different source.
 
 # Power Management
 CONFIG_ESP_SLEEP_POWER_DOWN_FLASH=y
@@ -79,8 +82,12 @@ CONFIG_ENABLE_ICD_LIT=y
 CONFIG_ICD_CLIENTS_SUPPORTED_PER_FABRIC=2
 CONFIG_ICD_MAX_NOTIFICATION_SUBSCRIBERS=2
 
-# Enable power save for the button
-CONFIG_GPIO_BUTTON_SUPPORT_POWER_SAVE=y
+# Button power-save is now a runtime option
+# (button_gpio_config_t::enable_power_save) rather than a Kconfig
+# symbol in the current espressif__button component. The app enables
+# it in factory_reset_button_register() by calling
+# iot_button_new_gpio_device() directly (bsp_iot_button_create()
+# doesn't expose the flag).
 
 # ESP32-H2-DevKitM-1 Settings
 # Buttons

@@ -9,6 +9,7 @@
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
 #include <bsp/esp-bsp.h>
+#include <button_gpio.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #if CONFIG_PM_ENABLE
@@ -31,8 +32,21 @@ using namespace chip::app::Clusters;
 
 static esp_err_t factory_reset_button_register()
 {
-    button_handle_t push_button;
-    esp_err_t err = bsp_iot_button_create(&push_button, nullptr, BSP_BUTTON_NUM);
+    // Bypass bsp_iot_button_create() so we can set enable_power_save=true:
+    // that flag arms the GPIO as a light-sleep wake source and only runs
+    // the button-scan timer while the button is actually being held. The
+    // BSP's static bsp_button_config[] leaves the field at its default
+    // (false), which would drop press events while the CPU is asleep and
+    // also keep the periodic timer running the whole time.
+    button_handle_t push_button = nullptr;
+    const button_config_t btn_config = {};
+    const button_gpio_config_t gpio_config = {
+        .gpio_num = BSP_BUTTON_1_IO,
+        .active_level = CONFIG_BSP_BUTTON_1_LEVEL,
+        .enable_power_save = true,
+        .disable_pull = false,
+    };
+    esp_err_t err = iot_button_new_gpio_device(&btn_config, &gpio_config, &push_button);
     VerifyOrReturnError(err == ESP_OK, err);
     return app_reset_button_register(push_button);
 }
