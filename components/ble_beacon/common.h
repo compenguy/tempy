@@ -9,7 +9,6 @@
 
 /* ESP APIs */
 #include <esp_log.h>
-#include <sdkconfig.h>
 
 /* FreeRTOS APIs */
 #include <freertos/FreeRTOS.h>

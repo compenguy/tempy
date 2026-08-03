@@ -169,6 +169,17 @@ extern "C" void app_main()
         }
     }
 
+    // Initialize the sensor BEFORE esp_matter::start(). Two reasons:
+    //   1. bme280_app_init caches the endpoint IDs it will later report to,
+    //      so the endpoints must already be defined on the node (they are,
+    //      above) and the sensor task must be constructed with those IDs
+    //      before Matter starts servicing subscription requests.
+    //   2. The sensor task itself vTaskDelays briefly on entry, so it does
+    //      not race the CHIP stack coming up. Neither has_matter_subscribers
+    //      nor attribute::update is safe to call before esp_matter::start()
+    //      has completed initialization; the 500 ms delay in the task
+    //      body handles that. If future refactors move esp_matter::start()
+    //      much later than this point, revisit that delay.
     ESP_LOGI(TAG, "Starting bme280 temperature/humidity sensor...");
     bme280_app_init(temp_sensor_ep, humidity_sensor_ep);
 
