@@ -91,7 +91,7 @@ Configuration Arguments:
 Build Arguments:
   -b, --build		invoke idf.py to build the specified target
 Programming Arguments:
-  -F, --full-flash	wipes out the entire flash and starts fresh (\`erase_flash\`)
+  -F, --full-flash	wipes out the entire flash and starts fresh (\`erase-flash\`)
   -f, --flash		write the built firmware to flash
 Debugging Arguments:
   -m, --monitor		starts serial debug montoring of device via the USB serial interface (ESP_SERIAL=${ESP_SERIAL})
@@ -199,7 +199,7 @@ if [ "${ARG_FULL_FLASH}" -ne 0 ]; then
 	log "Full-storage flashing project..."
 	(
 		cd "${SCRIPT_DIR}"
-		idf.py "${ESP_SERIAL_ARG[@]}" erase_flash
+		idf.py "${ESP_SERIAL_ARG[@]}" erase-flash
 		idf.py "${ESP_SERIAL_ARG[@]}" flash
 	)
 	FLASH_ACTIVITY=1
