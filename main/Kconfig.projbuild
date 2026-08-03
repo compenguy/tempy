@@ -17,6 +17,17 @@ menu "Example Configuration"
             extend the battery life. Recommended values are between 2000 (2 seconds)
             and 180000 (3 minutes).
 
+    config ENABLE_BLE_BEACON
+        bool "Broadcast sensor readings as a BLE advertisement"
+        default y
+        help
+            When enabled, each sensor reading is also broadcast as manufacturer-
+            specific data in a short BLE advertisement. This lets non-Matter
+            listeners on the same network pick up readings without joining the
+            Matter fabric. Disable to save the per-reading advertising window
+            (~50 ms of radio-on time) and shrink code size. BLE is still
+            required for Matter commissioning regardless of this setting.
+
     config BME280_I2C_SDA_PIN
         int "I2C SDA Pin"
         default 13
@@ -35,5 +46,28 @@ menu "Example Configuration"
         help
             7-bit I2C address for the BME280. Many modules use 0x76 when SDO
             is pulled low and 0x77 when SDO is pulled high.
+
+    config TEMP_REPORT_HYSTERESIS_TENTHS_C
+        int "Temperature report hysteresis (tenths of a degree Celsius)"
+        default 2
+        range 0 500
+        help
+            Minimum change in temperature required to trigger a Matter
+            attribute update, expressed in 0.1 C units (e.g. 2 means
+            0.2 C). A value of 0 disables hysteresis and reports every
+            reading. Larger values save power by keeping the Thread radio
+            asleep for more cycles, at the cost of coarser reporting.
+            Matter's subscription MaxInterval still forces periodic
+            reports during long stretches of stable readings.
+
+    config HUMIDITY_REPORT_HYSTERESIS_TENTHS_PCT
+        int "Humidity report hysteresis (tenths of a percent RH)"
+        default 10
+        range 0 1000
+        help
+            Minimum change in relative humidity required to trigger a
+            Matter attribute update, expressed in 0.1 %RH units (e.g. 10
+            means 1.0 %RH). A value of 0 disables hysteresis. See the
+            temperature hysteresis help for further discussion.
 
 endmenu
