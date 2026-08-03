@@ -13,13 +13,13 @@
 #include "app_priv.h"
 #include "bme280.h"
 
-#if CONFIG_ENABLE_BLE_BEACON
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
 #include <ble_beacon.h>
 #endif
 
 #define TAG_BME280 "APP_BME280"
 
-#if CONFIG_ENABLE_BLE_BEACON
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
 // Advertising duration per reading. 50ms is enough for 2-3 advertisements
 // at slow intervals, sufficient for nearby receivers to catch the beacon.
 #define ADV_TIME_MS 50
@@ -27,7 +27,7 @@
 
 #define I2C_PORT -1 // autoselect
 
-#define I2C_BME_ADDRESS CONFIG_BME280_I2C_ADDRESS
+#define I2C_BME_ADDRESS CONFIG_TEMPY_BME280_I2C_ADDRESS
 #define I2C_BME_CLK_FREQ 50000
 
 // Only push a Matter attribute update when the reading has moved by at
@@ -35,8 +35,8 @@
 // periodic reports at the SDK layer, so subscribers won't miss data during
 // long stretches of stable readings. Configured via menuconfig; Kconfig
 // stores them as tenths-of-unit integers, which we convert to float here.
-#define TEMP_HYSTERESIS_C       (CONFIG_TEMP_REPORT_HYSTERESIS_TENTHS_C / 10.0f)
-#define HUMIDITY_HYSTERESIS_PCT (CONFIG_HUMIDITY_REPORT_HYSTERESIS_TENTHS_PCT / 10.0f)
+#define TEMP_HYSTERESIS_C       (CONFIG_TEMPY_TEMP_REPORT_HYSTERESIS_TENTHS_C / 10.0f)
+#define HUMIDITY_HYSTERESIS_PCT (CONFIG_TEMPY_HUMIDITY_REPORT_HYSTERESIS_TENTHS_PCT / 10.0f)
 
 // esp i2c handles
 static i2c_master_bus_handle_t bus_handle;
@@ -105,7 +105,7 @@ static void matter_humidity_sensor_notification(uint16_t endpoint_id, float humi
     });
 }
 
-#if CONFIG_ENABLE_BLE_BEACON
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
 static void beacon_weather_sensor_broadcast(float temperature, float humidity, float pressure)
 {
     weather_data_t sensor_data = {
@@ -118,15 +118,15 @@ static void beacon_weather_sensor_broadcast(float temperature, float humidity, f
         ESP_LOGW(TAG_BME280, "BLE beacon broadcast failed: %s", esp_err_to_name(err));
     }
 }
-#endif // CONFIG_ENABLE_BLE_BEACON
+#endif // CONFIG_TEMPY_ENABLE_BLE_BEACON
 
 static void i2c_master_init(void)
 {
     // Create I2C master bus
     i2c_master_bus_config_t i2c_mst_config = {
         .i2c_port = I2C_PORT,
-        .sda_io_num = (gpio_num_t)CONFIG_BME280_I2C_SDA_PIN,
-        .scl_io_num = (gpio_num_t)CONFIG_BME280_I2C_SCL_PIN,
+        .sda_io_num = (gpio_num_t)CONFIG_TEMPY_BME280_I2C_SDA_PIN,
+        .scl_io_num = (gpio_num_t)CONFIG_TEMPY_BME280_I2C_SCL_PIN,
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .glitch_ignore_cnt = 7,
         .flags {
@@ -145,7 +145,7 @@ static void i2c_master_init(void)
     esp_err_t probe_err = i2c_master_probe(bus_handle, I2C_BME_ADDRESS, 100);
     if (probe_err != ESP_OK) {
         ESP_LOGE(TAG_BME280, "BME280 not found at 0x%02X! Check wiring (SDA=%d, SCL=%d). Error: %s",
-                 I2C_BME_ADDRESS, CONFIG_BME280_I2C_SDA_PIN, CONFIG_BME280_I2C_SCL_PIN,
+                 I2C_BME_ADDRESS, CONFIG_TEMPY_BME280_I2C_SDA_PIN, CONFIG_TEMPY_BME280_I2C_SCL_PIN,
                  esp_err_to_name(probe_err));
         ESP_ERROR_CHECK(probe_err);
     }
@@ -184,7 +184,7 @@ static void task_bme280_forced_mode(void *ignore)
             ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
             ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
 
-#if CONFIG_ENABLE_BLE_BEACON
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
             // BLE beacon is cheap and useful to local listeners, so it
             // fires every cycle regardless of change.
             beacon_weather_sensor_broadcast(t, h, NAN);
@@ -215,13 +215,13 @@ static void task_bme280_forced_mode(void *ignore)
         } else {
             ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
         }
-        vTaskDelay(pdMS_TO_TICKS(CONFIG_DELAY_BETWEEN_SENSOR_READINGS_MS));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_TEMPY_DELAY_BETWEEN_SENSOR_READINGS_MS));
     }
 }
 
 void bme280_app_init(endpoint_t *temp_sensor_ep, endpoint_t *humidity_sensor_ep)
 {
-#if CONFIG_ENABLE_BLE_BEACON
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
     // init for sending sensor data via beacons
     ESP_LOGI(TAG_BME280, "Initializing BLE beacon component");
     ESP_ERROR_CHECK(ble_beacon_init());

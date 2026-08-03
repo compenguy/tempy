@@ -115,7 +115,7 @@ extern "C" void app_main()
     esp_pm_config_t pm_config = {
         .max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
         .min_freq_mhz = CONFIG_XTAL_FREQ,  // Allow scaling down to crystal frequency for power savings
-#if CONFIG_SLEEP_BETWEEN_READINGS
+#if CONFIG_TEMPY_SLEEP_BETWEEN_READINGS
         .light_sleep_enable = true
 #else
         .light_sleep_enable = false
@@ -123,7 +123,7 @@ extern "C" void app_main()
     };
 
     ESP_LOGI(TAG, "Initializing power management...");
-#if CONFIG_SLEEP_BETWEEN_READINGS
+#if CONFIG_TEMPY_SLEEP_BETWEEN_READINGS
     ESP_LOGW(TAG, "Device uses sleep. Serial debug output will be unreliable.");
 #endif
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_pm_configure(&pm_config));

@@ -1,6 +1,6 @@
-menu "Example Configuration"
+menu "Tempy Configuration"
 
-    config SLEEP_BETWEEN_READINGS
+    config TEMPY_SLEEP_BETWEEN_READINGS
         bool "Sleep between taking sensor readings"
         depends on FREERTOS_USE_TICKLESS_IDLE
         default n
@@ -8,7 +8,7 @@ menu "Example Configuration"
             This puts the board into light sleep between taking sensor readings.
             This will have the effect of disabling serial debug as well.
 
-    config DELAY_BETWEEN_SENSOR_READINGS_MS
+    config TEMPY_DELAY_BETWEEN_SENSOR_READINGS_MS
         int "Delay from taking one sensor reading until the next, in milliseconds"
         default 60000
         help
@@ -17,7 +17,7 @@ menu "Example Configuration"
             extend the battery life. Recommended values are between 2000 (2 seconds)
             and 180000 (3 minutes).
 
-    config ENABLE_BLE_BEACON
+    config TEMPY_ENABLE_BLE_BEACON
         bool "Broadcast sensor readings as a BLE advertisement"
         default y
         help
@@ -28,26 +28,26 @@ menu "Example Configuration"
             (~50 ms of radio-on time) and shrink code size. BLE is still
             required for Matter commissioning regardless of this setting.
 
-    config BME280_I2C_SDA_PIN
+    config TEMPY_BME280_I2C_SDA_PIN
         int "I2C SDA Pin"
         default 13
         help
             GPIO number for I2C master data
 
-    config BME280_I2C_SCL_PIN
+    config TEMPY_BME280_I2C_SCL_PIN
         int "I2C SCL Pin"
         default 14
         help
             GPIO number for I2C master clock
 
-    config BME280_I2C_ADDRESS
+    config TEMPY_BME280_I2C_ADDRESS
         hex "BME280 I2C address"
         default 0x76
         help
             7-bit I2C address for the BME280. Many modules use 0x76 when SDO
             is pulled low and 0x77 when SDO is pulled high.
 
-    config TEMP_REPORT_HYSTERESIS_TENTHS_C
+    config TEMPY_TEMP_REPORT_HYSTERESIS_TENTHS_C
         int "Temperature report hysteresis (tenths of a degree Celsius)"
         default 2
         range 0 500
@@ -60,14 +60,14 @@ menu "Example Configuration"
             Matter's subscription MaxInterval still forces periodic
             reports during long stretches of stable readings.
 
-    config HUMIDITY_REPORT_HYSTERESIS_TENTHS_PCT
+    config TEMPY_HUMIDITY_REPORT_HYSTERESIS_TENTHS_PCT
         int "Humidity report hysteresis (tenths of a percent RH)"
         default 10
         range 0 1000
         help
             Minimum change in relative humidity required to trigger a
             Matter attribute update, expressed in 0.1 %RH units (e.g. 10
-            means 1.0 %RH). A value of 0 disables hysteresis. See the
+             means 1.0 %RH). A value of 0 disables hysteresis. See the
             temperature hysteresis help for further discussion.
 
 endmenu
