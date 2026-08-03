@@ -143,8 +143,12 @@ static void task_bme280_forced_mode(void *ignore)
             ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
             ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
             beacon_weather_sensor_broadcast(t, h, NAN);
-            matter_temp_sensor_notification(temp_endpoint_id, t);
-            matter_humidity_sensor_notification(humidity_endpoint_id, h);
+            // only send matter notifications if we have matter subscribers
+            if (chip::app::InteractionModelEngine::GetInstance()->GetNumActiveReadHandlers(
+                    chip::app::ReadHandler::InteractionType::Subscribe) >  0) {
+                matter_temp_sensor_notification(temp_endpoint_id, t);
+                matter_humidity_sensor_notification(humidity_endpoint_id, h);
+            }
         } else {
             ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
         }

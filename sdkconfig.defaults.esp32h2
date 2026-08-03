@@ -33,19 +33,19 @@ CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
 
 # LwIP config for OpenThread for light sleep
 CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
-CONFIG_LWIP_MULTICAST_PING=y
+CONFIG_LWIP_MULTICAST_PING=n
 CONFIG_LWIP_IPV4=n
 CONFIG_LWIP_ND6=n
 CONFIG_DISABLE_IPV4=y
 
 # MDNS platform
-CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_USE_MINIMAL_MDNS=y
 
 # Disable STA for ESP32H2
 CONFIG_ENABLE_WIFI_STATION=n
 
 # Matter configuration
-CONFIG_ENABLE_OTA_REQUESTOR=y
+CONFIG_ENABLE_OTA_REQUESTOR=n
 CONFIG_ENABLE_EXTENDED_DISCOVERY=y
 
 # ICD configuration
@@ -60,16 +60,17 @@ CONFIG_ICD_SLOW_POLL_INTERVAL_MS=60000
 CONFIG_ICD_FAST_POLL_INTERVAL_MS=200
 
 # Idle mode interval: Time before transitioning from active to idle mode.
-# Reduced to 30s - device goes idle faster after activity completes.
-CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=30
+# Device stays idle for 3600 seconds (one hour)
+CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=3600
 
 # Active mode interval: How long device stays awake after sending a message.
 # Reduced to 500ms - enough for response, then back to sleep.
 CONFIG_ICD_ACTIVE_MODE_INTERVAL_MS=500
 
 # Active mode threshold: Minimum active time when woken by external event.
-# Reduced to 1s - quick wake, handle event, return to idle.
-CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=1000
+# Only required when a check-in client is registered
+# LIT spec requires >= 5000ms
+CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=5000
 
 # LIT (Long Idle Time) ICD - enables deep idle states
 CONFIG_ENABLE_ICD_LIT=y
