@@ -50,6 +50,15 @@ static uint16_t humidity_endpoint_id;
 static float last_reported_temp = NAN;
 static float last_reported_humidity = NAN;
 
+#if CONFIG_TEMPY_ENABLE_BLE_BEACON
+// Beacon on/off is toggled from the Matter thread (via app_event_cb) and
+// read every cycle by the sensor task. `volatile` is sufficient here: it's
+// a single boolean with no ordering requirement against other state.
+// bme280_beacon_enable() completes the underlying ble_beacon_init() before
+// flipping the flag, so a sensor-task read of `true` is safe to act on.
+static volatile bool beacon_active = false;
+#endif
+
 // matter callbacks
 using namespace esp_matter;
 using namespace esp_matter::endpoint;
@@ -115,6 +124,46 @@ static void beacon_weather_sensor_broadcast(float temperature, float humidity, f
     esp_err_t err = ble_beacon_start(&sensor_data, ADV_TIME_MS);
     if (err != ESP_OK) {
         ESP_LOGW(TAG_BME280, "BLE beacon broadcast failed: %s", esp_err_to_name(err));
+    }
+}
+
+void bme280_beacon_enable(void)
+{
+    if (beacon_active) {
+        return;
+    }
+    ESP_LOGI(TAG_BME280, "Enabling BLE weather beacon");
+    esp_err_t err = ble_beacon_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_BME280, "ble_beacon_init failed (%s); beacon stays disabled",
+                 esp_err_to_name(err));
+        return;
+    }
+    // Set the flag AFTER ble_beacon_init() returns so a task that observes
+    // beacon_active==true can immediately call ble_beacon_start() safely.
+    beacon_active = true;
+}
+
+void bme280_beacon_disable(void)
+{
+    if (!beacon_active) {
+        return;
+    }
+    ESP_LOGI(TAG_BME280, "Disabling BLE weather beacon");
+    // Clear the flag first: any subsequent sensor-task cycle will skip the
+    // broadcast. There is still a small window where a cycle already
+    // inside beacon_weather_sensor_broadcast() will finish out its ~50 ms
+    // advertising burst; ble_beacon_deinit() below serializes on the
+    // NimBLE host teardown, but if this races with an in-flight advertise
+    // the beacon's own semaphore/task cleanup can be rough. In practice
+    // Matter's factory reset flow (button long-press) triggers a reboot
+    // shortly after kFabricRemoved, which resets the whole BLE stack
+    // cleanly. A live-fabric RemoveFabric that expects to reopen
+    // commissioning without a reboot is best-effort here.
+    beacon_active = false;
+    esp_err_t err = ble_beacon_deinit();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_BME280, "ble_beacon_deinit failed: %s", esp_err_to_name(err));
     }
 }
 #endif // CONFIG_TEMPY_ENABLE_BLE_BEACON
@@ -205,8 +254,12 @@ static void task_bme280_forced_mode(void *ignore)
 
 #if CONFIG_TEMPY_ENABLE_BLE_BEACON
             // BLE beacon is cheap and useful to local listeners, so it
-            // fires every cycle regardless of change.
-            beacon_weather_sensor_broadcast(t, h, NAN);
+            // fires every cycle regardless of change -- but only once
+            // Matter has released the BLE controller (see the state
+            // machine in app_main.cpp:app_event_cb).
+            if (beacon_active) {
+                beacon_weather_sensor_broadcast(t, h, NAN);
+            }
 #endif
 
             // Matter attribute updates wake the CHIP stack and hold the
@@ -269,11 +322,10 @@ void bme280_app_init(endpoint_t *temp_sensor_ep, endpoint_t *humidity_sensor_ep)
     // has_matter_subscribers() query or attribute::update. If you ever move
     // esp_matter::start() much later relative to bme280_app_init, revisit
     // that delay.
-#if CONFIG_TEMPY_ENABLE_BLE_BEACON
-    // init for sending sensor data via beacons
-    ESP_LOGI(TAG_BME280, "Initializing BLE beacon component");
-    ESP_ERROR_CHECK_WITHOUT_ABORT(ble_beacon_init());
-#endif
+    // BLE beacon initialization is intentionally NOT done here. The beacon
+    // owns the BLE controller / NimBLE host, which collides with Matter's
+    // CHIPoBLE (used for commissioning). app_main.cpp brings the beacon up
+    // via bme280_beacon_enable() only after Matter has released BLE.
 
     // init for sending sensor data via matter+thread
     temp_endpoint_id = endpoint::get_id(temp_sensor_ep);
