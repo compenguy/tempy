@@ -38,7 +38,9 @@ static const char *TAG = "BME280";
 #define OSRS_16X  0x05
 
 #define BME280_TEMP_OSRS  OSRS_1X
-#define BME280_PRESS_OSRS OSRS_1X
+// Pressure is not reported by this application, so skip the measurement
+// entirely to shave ~2.3 ms off each forced read (per datasheet 9.1).
+#define BME280_PRESS_OSRS OSRS_SKIP
 #define BME280_HUM_OSRS   OSRS_1X
 
 // --------- I2C helpers ----------

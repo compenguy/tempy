@@ -6,6 +6,7 @@
 #include <freertos/task.h>
 #include <driver/i2c_master.h>
 #include <esp_matter_core.h>
+#include <app/InteractionModelEngine.h>
 #include <ble_beacon.h>
 #include <math.h> // required for NAN constant
 
@@ -24,6 +25,15 @@
 #define I2C_BME_ADDRESS CONFIG_BME280_I2C_ADDRESS
 #define I2C_BME_CLK_FREQ 50000
 
+// Only push a Matter attribute update when the reading has moved by at
+// least the hysteresis. Matter's subscription MaxInterval still forces
+// periodic reports at the SDK layer, so subscribers won't miss data during
+// long stretches of stable readings. These values err on the side of
+// responsiveness for a home environment; increase them for more power
+// savings at the cost of coarser reporting.
+#define TEMP_HYSTERESIS_C     0.2f
+#define HUMIDITY_HYSTERESIS_PCT 1.0f
+
 // esp i2c handles
 static i2c_master_bus_handle_t bus_handle;
 static bme280_t bme;
@@ -31,6 +41,11 @@ static bme280_t bme;
 // matter data
 static uint16_t temp_endpoint_id;
 static uint16_t humidity_endpoint_id;
+
+// Last values pushed to Matter. NAN means "never reported"; the first
+// successful reading always gets sent so subscribers get an initial value.
+static float last_reported_temp = NAN;
+static float last_reported_humidity = NAN;
 
 // matter callbacks
 using namespace esp_matter;
@@ -131,6 +146,26 @@ static void i2c_master_init(void)
     ESP_LOGI(TAG_BME280, "BME280 detected on I2C bus");
 }
 
+// True if the new reading differs from the previously-reported value by at
+// least the hysteresis, or if we have never reported. NAN readings never
+// pass this gate.
+static bool reading_changed_enough(float new_val, float last_val, float hysteresis)
+{
+    if (isnan(new_val)) {
+        return false;
+    }
+    if (isnan(last_val)) {
+        return true;
+    }
+    return fabsf(new_val - last_val) >= hysteresis;
+}
+
+static bool has_matter_subscribers(void)
+{
+    return chip::app::InteractionModelEngine::GetInstance()->GetNumActiveReadHandlers(
+               chip::app::ReadHandler::InteractionType::Subscribe) > 0;
+}
+
 static void task_bme280_forced_mode(void *ignore)
 {
     float t, h;
@@ -142,12 +177,32 @@ static void task_bme280_forced_mode(void *ignore)
         if (err == ESP_OK) {
             ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
             ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
+
+            // BLE beacon is cheap and useful to local listeners, so it
+            // fires every cycle regardless of change.
             beacon_weather_sensor_broadcast(t, h, NAN);
-            // only send matter notifications if we have matter subscribers
-            if (chip::app::InteractionModelEngine::GetInstance()->GetNumActiveReadHandlers(
-                    chip::app::ReadHandler::InteractionType::Subscribe) >  0) {
-                matter_temp_sensor_notification(temp_endpoint_id, t);
-                matter_humidity_sensor_notification(humidity_endpoint_id, h);
+
+            // Matter attribute updates wake the CHIP stack and hold the
+            // ICD in active mode for ActiveModeThreshold. Skip them when
+            // no one is listening, and otherwise only send when the value
+            // has moved by at least the hysteresis. Matter's own
+            // MaxInterval logic will still force periodic reports to keep
+            // subscriptions alive during stable stretches.
+            if (has_matter_subscribers()) {
+                if (reading_changed_enough(t, last_reported_temp, TEMP_HYSTERESIS_C)) {
+                    matter_temp_sensor_notification(temp_endpoint_id, t);
+                    last_reported_temp = t;
+                } else {
+                    ESP_LOGD(TAG_BME280, "Temperature unchanged (%.2f C), skipping Matter update", t);
+                }
+                if (reading_changed_enough(h, last_reported_humidity, HUMIDITY_HYSTERESIS_PCT)) {
+                    matter_humidity_sensor_notification(humidity_endpoint_id, h);
+                    last_reported_humidity = h;
+                } else {
+                    ESP_LOGD(TAG_BME280, "Humidity unchanged (%.1f %%RH), skipping Matter update", h);
+                }
+            } else {
+                ESP_LOGD(TAG_BME280, "No Matter subscribers, skipping attribute updates");
             }
         } else {
             ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
