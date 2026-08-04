@@ -12,8 +12,23 @@ CONFIG_BT_LE_LP_CLK_SRC_MAIN_XTAL=y
 CONFIG_ESP_SLEEP_POWER_DOWN_FLASH=y
 CONFIG_PM_ENABLE=y
 CONFIG_PM_DFS_INIT_AUTO=y
-CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP=y
+# Keep peripherals biased through light sleep. Turning this on saves
+# a bit of average current, but on the H2 the I2C master driver's
+# .allow_pd = true state-restore is unreliable: after wake, the very
+# next BME280 transaction times out, the sensor task never seeds the
+# Matter attribute, and reads come back as null. With this off, light
+# sleep still saves the CPU + RF power for ~99% of each 60 s cycle,
+# and only the peripheral bias current is retained -- a few tens of
+# µA on H2. Well worth it for reliable I2C.
+CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP=n
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_48=y
+# Hold a NO_LIGHT_SLEEP PM lock automatically whenever the USB Serial
+# JTAG port is enumerated. H2's USJ block doesn't survive light sleep
+# (SOC_USB_SERIAL_JTAG_SUPPORT_LIGHT_SLEEP is a TODO in the SoC caps),
+# so without this, plugging in a cable while light sleep is enabled
+# kills the monitor on the first sleep entry and makes debugging
+# impossible. Zero cost when the cable is unplugged.
+CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION=y
 
 # FreeRTOS config for light sleep
 CONFIG_FREERTOS_HZ=1000
