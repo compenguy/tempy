@@ -68,6 +68,19 @@ CONFIG_DISABLE_IPV4=y
 # _matter._tcp record on the OTBR's SRP server for LAN bridging.
 CONFIG_USE_MINIMAL_MDNS=n
 
+# CHIP-over-BLE advertising intervals (units of 0.625 ms).
+# Matter's spec-recommended default is 25 ms fast for the first 30 s,
+# then 500 ms slow for the remainder of the commissioning window.
+# BlueZ / snap chip-tool tends to time out on Connect() during the
+# 500 ms slow phase -- BlueZ's Device.Connect() has a hard 20 s ceiling
+# and slow-advertising connection procedures don't always fit. Halve
+# the slow interval so connections stay reliable if the human takes
+# more than 30 s to fire the pairing command. The extra power is
+# negligible for a LIT ICD because BLE is only on during commissioning
+# windows (max 15 min).
+CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MIN=160
+CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MAX=160
+
 # Disable STA for ESP32H2
 CONFIG_ENABLE_WIFI_STATION=n
 
