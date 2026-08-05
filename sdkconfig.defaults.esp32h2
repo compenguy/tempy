@@ -56,8 +56,17 @@ CONFIG_LWIP_IPV4=n
 CONFIG_LWIP_ND6=n
 CONFIG_DISABLE_IPV4=y
 
-# MDNS platform
-CONFIG_USE_MINIMAL_MDNS=y
+# DNS-SD backend for Matter: use the OpenThread platform mDNS/SRP
+# implementation, not CHIP's own minimal mDNS. On a Thread-only
+# device, minimal mDNS can't send its advertisements onto the mesh
+# reliably -- Advertiser_ImplMinimalMdns::Respond() ends up bouncing
+# with LwIP ERR_RTE / CHIP_ERROR_INVALID_ADDRESS, no operational
+# record ever propagates to the OTBR, chip-tool's discovery times
+# out, and commissioning fails at the CASE step. With this off,
+# ChipDnssdPublishService routes through OpenThreadDnssdImpl and
+# calls otSrpClientAddService, which is what actually lands the
+# _matter._tcp record on the OTBR's SRP server for LAN bridging.
+CONFIG_USE_MINIMAL_MDNS=n
 
 # Disable STA for ESP32H2
 CONFIG_ENABLE_WIFI_STATION=n
