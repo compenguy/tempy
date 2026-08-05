@@ -32,18 +32,34 @@ using namespace chip::app::Clusters;
 
 static esp_err_t factory_reset_button_register()
 {
-    // Bypass bsp_iot_button_create() so we can set enable_power_save=true:
-    // that flag arms the GPIO as a light-sleep wake source and only runs
-    // the button-scan timer while the button is actually being held. The
-    // BSP's static bsp_button_config[] leaves the field at its default
-    // (false), which would drop press events while the CPU is asleep and
-    // also keep the periodic timer running the whole time.
+    // Bypass bsp_iot_button_create() so we can set enable_power_save when
+    // we're actually going to light-sleep. That flag arms the GPIO as a
+    // light-sleep wake source and only runs the button-scan timer while
+    // the button is being held; the BSP's static bsp_button_config[]
+    // leaves it at its default (false), which would drop press events
+    // while the CPU is asleep and also keep the periodic scan timer
+    // running the whole time.
+    //
+    // enable_power_save is gated on CONFIG_TEMPY_SLEEP_BETWEEN_READINGS
+    // for two reasons:
+    //   1. When we're not sleeping, there's nothing to wake from, so
+    //      pay-per-press with a permanently-running 5 ms scan timer is
+    //      not worse than the interrupt-driven path.
+    //   2. On ESP32-H2 with CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP,
+    //      the button component's power-save path calls gpio_hold_en(),
+    //      which hands GPIO 9 to the LP AON domain. H2's LP IO has no
+    //      IOMUX, so the regular GPIO matrix ISR that iot_button relies
+    //      on never sees level changes and the button appears dead.
     button_handle_t push_button = nullptr;
     const button_config_t btn_config = {};
     const button_gpio_config_t gpio_config = {
         .gpio_num = BSP_BUTTON_1_IO,
         .active_level = CONFIG_BSP_BUTTON_1_LEVEL,
+#if CONFIG_TEMPY_SLEEP_BETWEEN_READINGS
         .enable_power_save = true,
+#else
+        .enable_power_save = false,
+#endif
         .disable_pull = false,
     };
     esp_err_t err = iot_button_new_gpio_device(&btn_config, &gpio_config, &push_button);
