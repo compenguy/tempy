@@ -165,6 +165,15 @@ static bool has_matter_subscribers(void)
     return subscribed;
 }
 
+// Retry parameters for transient I2C failures. A single failure will
+// typically be a NACK (esp_err ESP_ERR_INVALID_STATE from the IDF v5
+// i2c_master driver) caused by a µs-scale rail droop when the radio is
+// bursting, or by noise coupling into the SDA/SCL lines. Retrying after
+// a short delay clears these almost always. Three attempts × 20 ms is
+// negligible against a 60 s cycle.
+#define BME280_READ_MAX_ATTEMPTS  3
+#define BME280_READ_RETRY_DELAY_MS 20
+
 static void task_bme280_forced_mode(void *ignore)
 {
     float t, h;
@@ -173,7 +182,16 @@ static void task_bme280_forced_mode(void *ignore)
     // bme280_app_init below for why this delay is needed.)
     vTaskDelay(pdMS_TO_TICKS(500));
     while (1) {
-        esp_err_t err = bme280_read_temp_humidity(&bme, &t, &h);
+        esp_err_t err = ESP_FAIL;
+        for (int attempt = 0; attempt < BME280_READ_MAX_ATTEMPTS; ++attempt) {
+            err = bme280_read_temp_humidity(&bme, &t, &h);
+            if (err == ESP_OK) {
+                break;
+            }
+            ESP_LOGD(TAG_BME280, "Read attempt %d/%d failed (%s), retrying",
+                     attempt + 1, BME280_READ_MAX_ATTEMPTS, esp_err_to_name(err));
+            vTaskDelay(pdMS_TO_TICKS(BME280_READ_RETRY_DELAY_MS));
+        }
         if (err == ESP_OK) {
             ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
             ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
@@ -221,7 +239,8 @@ static void task_bme280_forced_mode(void *ignore)
                 ESP_LOGD(TAG_BME280, "Humidity unchanged (%.1f %%RH), skipping update", h);
             }
         } else {
-            ESP_LOGW(TAG_BME280, "Read failed: %s", esp_err_to_name(err));
+            ESP_LOGW(TAG_BME280, "Read failed after %d attempts: %s",
+                     BME280_READ_MAX_ATTEMPTS, esp_err_to_name(err));
         }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_TEMPY_DELAY_BETWEEN_SENSOR_READINGS_MS));
     }
