@@ -18,6 +18,7 @@
 #include <esp_matter.h>
 #include <esp_matter_ota.h>
 #include <nvs_flash.h>
+#include <setup_payload/OnboardingCodesUtil.h>
 
 #include <app_priv.h>
 #include <app_reset.h>
@@ -231,5 +232,16 @@ extern "C" void app_main()
         ESP_LOGI(TAG, "Starting Matter framework...");
         err = esp_matter::start(app_event_cb);
         ESP_ERROR_CHECK_WITHOUT_ABORT(err);
+    }
+
+    /* Log the setup payload so both the QR-code URL and the 11-digit
+     * manual pairing code appear in the boot log, e.g.:
+     *   chip[SVR]: SetupQRCode: [MT:...]
+     *   chip[SVR]: https://project-chip.github.io/.../qrcode.html?data=MT%3A...
+     *   chip[SVR]: Manual pairing code: [...]
+     * The rendezvous flag needs to match the flavors of commissioning
+     * this build supports; we're BLE-only for initial provisioning. */
+    if (err == ESP_OK) {
+        PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
     }
 }
