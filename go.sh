@@ -7,9 +7,14 @@ SCRIPT_NAME="$(basename "$0")"
 die() { echo "$*" 1>&2; exit 1; }
 log() { echo "TEMPY-BUILD: $*"; }
 
-ESP_IDF_DIR="${HOME}/.local/share/esp/esp-idf"
+# SDK paths default to per-user checkouts under ~/.local/share, but honor
+# a pre-set environment override (ESP_IDF_DIR / ESP_MATTER_DIR) so CI in
+# containers like espressif/esp-matter -- which install the SDKs to
+# /opt/espressif/{esp-idf,esp-matter} -- can point us at those without
+# patching the script or fabricating symlinks.
+ESP_IDF_DIR="${ESP_IDF_DIR:-${HOME}/.local/share/esp/esp-idf}"
 ESP_IDF_VERSION="v5.5.1"
-ESP_MATTER_DIR="${HOME}/.local/share/matter/esp-matter"
+ESP_MATTER_DIR="${ESP_MATTER_DIR:-${HOME}/.local/share/matter/esp-matter}"
 ESP_TARGET="esp32h2"
 ESP_SERIAL="/dev/ttyACM0"
 ESP_SERIAL_ARG=()

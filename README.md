@@ -199,9 +199,14 @@ The published release workflow this project follows:
 
 1. Bump `CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER`, commit.
 2. Tag the commit (`git tag v<n> && git push --tags`).
-3. `./go.sh --reconfigure --build --ota`.
-4. Create a GitHub release for the tag; attach `ota/tempy-v<n>.ota` (and,
-   for USB re-flash convenience, `build/tempy.bin`).
+3. Create a GitHub release for the tag. The
+   [release workflow](.github/workflows/release.yml) builds
+   `tempy.bin` and `tempy-v<n>.ota` in a container that has ESP-IDF and
+   esp-matter pre-installed and attaches both to the release as assets.
+
+Producing the same artifacts locally (for hand-verification or as a
+fallback when the workflow can't run) is a single `./go.sh --reconfigure
+--build --ota` invocation.
 
 Home Assistant's Matter integration exposes an OTA Provider via
 [python-matter-server](https://github.com/home-assistant-libs/python-matter-server).

@@ -1,0 +1,98 @@
+# Build tempy.bin and the matching Matter OTA image when a GitHub release
+# is published, and attach both to the release as downloadable assets.
+#
+# Manual runs via workflow_dispatch skip the release-attach step and just
+# leave the artifacts on the workflow run itself, so you can smoke-test
+# the pipeline without needing a real release.
+name: Build release artifacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Workflow-scope permissions are read-only; the publish job re-grants
+# `contents: write` locally so only that step is able to touch the release.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build firmware + OTA image
+    runs-on: ubuntu-24.04
+    # espressif/esp-matter ships ESP-IDF + esp-matter (with all CHIP
+    # submodules already checked out) plus a matching Python venv. Using
+    # it saves us the ~10-15 min it would otherwise take to clone and
+    # bootstrap the SDKs from scratch on every release.
+    container:
+      image: espressif/esp-matter:latest_idf_v5.5.4
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Point go.sh at the container's pre-installed SDKs
+        shell: bash
+        run: |
+          echo "ESP_IDF_DIR=${IDF_PATH}"       >> "${GITHUB_ENV}"
+          echo "ESP_MATTER_DIR=${ESP_MATTER_PATH}" >> "${GITHUB_ENV}"
+
+      # Prevent the classic "forgot to bump sdkconfig before tagging" bug.
+      # For a tag like v3 we insist CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=3
+      # so the .ota this workflow produces (tempy-v3.ota) really does
+      # advertise version 3. Non-vN tags (e.g. hotfix-2026-08-06) skip
+      # the check with a warning; workflow_dispatch skips it entirely.
+      - name: Verify tag matches CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          set -e
+          cfg_ver=$(awk -F= '/^CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=/{print $2}' sdkconfig.defaults)
+          if [[ "${GITHUB_REF_NAME}" =~ ^v([0-9]+) ]]; then
+            tag_ver="${BASH_REMATCH[1]}"
+            echo "Release tag ${GITHUB_REF_NAME} -> version ${tag_ver}; sdkconfig has ${cfg_ver}"
+            if [ "${tag_ver}" != "${cfg_ver}" ]; then
+              echo "::error::Tag major version ${tag_ver} doesn't match CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=${cfg_ver}. Bump sdkconfig.defaults before tagging."
+              exit 1
+            fi
+          else
+            echo "::warning::Release tag ${GITHUB_REF_NAME} doesn't match vN(.M...) pattern; skipping version sanity check. sdkconfig has ${cfg_ver}."
+          fi
+
+      - name: Build firmware and wrap OTA image
+        shell: bash
+        run: |
+          ./go.sh --reconfigure --build --ota
+
+      # Handed off to the publish job (which runs on a plain runner, not
+      # in the SDK container, so it can use the standard release-upload
+      # action without worrying about node-in-container edge cases).
+      - name: Collect build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            build/tempy.bin
+            ota/tempy-v*.ota
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Attach artifacts to release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: dist/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          fail_on_unmatched_files: true
