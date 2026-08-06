@@ -109,21 +109,21 @@ contains:
 Generate and flash one unit:
 
 ```
-$ ./go.sh --mfg-gen            # produces build/mfg/out/fff1_8000/<uuid>/
+$ ./go.sh --mfg-gen            # produces mfg/out/fff1_8000/<uuid>/
 $ ./go.sh --mfg-flash          # writes newest to fctry @ 0x3E0000
 ```
 
 Or provision a batch (e.g. 20 boards for an assembly session):
 
 ```
-$ ./go.sh --mfg-gen 20         # 20 per-unit blobs under build/mfg/out/
+$ ./go.sh --mfg-gen 20         # 20 per-unit blobs under mfg/out/
 # ... then for each board, connect it and run:
-$ ./go.sh --mfg-flash build/mfg/out/fff1_8000/<that-unit's-uuid>/<uuid>-partition.bin
+$ ./go.sh --mfg-flash mfg/out/fff1_8000/<that-unit's-uuid>/<uuid>-partition.bin
 ```
 
 The onboarding codes for each unit (QR-code string, manual pairing code,
 passcode, discriminator) are written to
-`build/mfg/out/fff1_8000/<uuid>/<uuid>-onb_codes.csv`, and a scannable QR-code
+`mfg/out/fff1_8000/<uuid>/<uuid>-onb_codes.csv`, and a scannable QR-code
 PNG is generated alongside as `<uuid>-qrcode.png`. Keep these with the
 physical unit -- either printed on the enclosure, or archived against the
 serial number -- since they're the only way to commission that specific

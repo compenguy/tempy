@@ -44,7 +44,10 @@ FCTRY_OFFSET="0x3E0000"
 NVS_OFFSET="0x10000"
 NVS_SIZE="0xC000"
 
-MFG_OUT_DIR="${SCRIPT_DIR}/build/mfg"
+# Keep mfg output outside build/ because idf.py set-target and idf.py
+# fullclean both wipe build/ wholesale. Per-unit passcodes/DACs are the
+# one artifact in the tree that hurts to lose.
+MFG_OUT_DIR="${SCRIPT_DIR}/mfg"
 
 function init_esp_idf() {
 	(
