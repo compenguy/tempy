@@ -210,9 +210,9 @@ function mfg_gen_cd() {
 
 # Generate one (or N) factory partition binaries. Each contains a
 # unique passcode, discriminator, serial number, and DAC signed by the
-# project PAI. Output lands in build/mfg/out/<vid_pid>/<uuid>/, with
-# the flashable image at build/mfg/out/<vid_pid>/<uuid>/<uuid>-partition.bin
-# and the onboarding codes / QR PNG alongside.
+# project PAI. Output lands in mfg/out/<vid_pid>/<uuid>/, with the
+# flashable image at mfg/out/<vid_pid>/<uuid>/<uuid>-partition.bin and
+# the onboarding codes / QR PNG alongside.
 function mfg_gen() {
 	local count="${1:-1}"
 	_ensure_mfg_tool
@@ -307,7 +307,7 @@ Debugging Arguments:
   -m, --monitor		starts serial debug montoring of device via the USB serial interface (ESP_SERIAL=${ESP_SERIAL})
 Factory-Data Arguments:
       --mfg-gen [N]	generate N per-unit factory partition binaries under
-            		build/mfg/out/ (default N=1) using esp-matter-mfg-tool.
+            		mfg/out/ (default N=1) using esp-matter-mfg-tool.
             		Also synthesizes a signed CD for the project VID/PID on
             		first run (prompting to build chip-cert if needed).
       --mfg-flash [BIN]	flash a factory partition binary to the fctry offset
