@@ -245,7 +245,9 @@ function mfg_gen() {
 function mfg_flash() {
 	local bin="${1:-}"
 	if [ -z "${bin}" ]; then
-		bin="$(ls -t "${MFG_OUT_DIR}"/out/*/*-partition.bin 2>/dev/null | head -n1 || true)"
+		# mfg_tool nests output as out/<vid_pid>/<uuid>/<uuid>-partition.bin,
+		# so we glob three levels below MFG_OUT_DIR/out.
+		bin="$(ls -t "${MFG_OUT_DIR}"/out/*/*/*-partition.bin 2>/dev/null | head -n1 || true)"
 		[ -n "${bin}" ] || die "No factory partition binary found. Run '${SCRIPT_NAME} --mfg-gen' first."
 	fi
 	[ -f "${bin}" ] || die "Factory partition binary not found: ${bin}"
