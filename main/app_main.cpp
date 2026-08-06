@@ -31,6 +31,41 @@ using namespace esp_matter::attribute;
 using namespace esp_matter::endpoint;
 using namespace chip::app::Clusters;
 
+// Enrich the root node's Basic Information cluster with the optional attributes
+// (ProductLabel, PartNumber, ProductURL, SerialNumber, ManufacturingDate) so
+// commissioners like Home Assistant can display them. root_node::create only
+// installs the mandatory subset; anything else has to be added by hand here.
+// The values passed at create time are placeholders -- these attributes are
+// marked ATTRIBUTE_FLAG_MANAGED_INTERNALLY, which routes reads through
+// GetDeviceInstanceInfoProvider() and ultimately the `fctry` NVS partition
+// baked by esp-matter-mfg-tool. Also add ThreadNetworkDiagnostics on the same
+// endpoint since we're a Thread device; that gives fabric-side tools a
+// well-defined place to read the actual network name / PAN ID rather than
+// guessing from other identifiers.
+static esp_err_t enrich_root_node_clusters(node_t *node)
+{
+    endpoint_t *root_ep = endpoint::get(node, 0);
+    VerifyOrReturnError(root_ep != nullptr, ESP_FAIL,
+                        ESP_LOGE(TAG, "Root endpoint not found"));
+
+    cluster_t *basic_info = cluster::get(root_ep, BasicInformation::Id);
+    VerifyOrReturnError(basic_info != nullptr, ESP_FAIL,
+                        ESP_LOGE(TAG, "Basic Information cluster not found on root endpoint"));
+
+    cluster::basic_information::attribute::create_product_label(basic_info, nullptr, 0);
+    cluster::basic_information::attribute::create_part_number(basic_info, nullptr, 0);
+    cluster::basic_information::attribute::create_product_url(basic_info, nullptr, 0);
+    cluster::basic_information::attribute::create_serial_number(basic_info, nullptr, 0);
+    cluster::basic_information::attribute::create_manufacturing_date(basic_info, nullptr, 0);
+
+#if CHIP_DEVICE_CONFIG_ENABLE_THREAD
+    cluster::thread_network_diagnostics::config_t td_config;
+    VerifyOrReturnError(cluster::thread_network_diagnostics::create(root_ep, &td_config, CLUSTER_FLAG_SERVER) != nullptr,
+                        ESP_FAIL, ESP_LOGE(TAG, "Failed to create ThreadNetworkDiagnostics cluster"));
+#endif
+    return ESP_OK;
+}
+
 static esp_err_t factory_reset_button_register()
 {
     // Bypass bsp_iot_button_create() so we can set enable_power_save when
@@ -174,6 +209,11 @@ extern "C" void app_main()
             err = ESP_FAIL;
             ESP_LOGE(TAG, "Failed to create Matter node");
         }
+    }
+
+    if (err == ESP_OK && node != nullptr) {
+        ESP_LOGI(TAG, "Enriching root node clusters...");
+        ESP_ERROR_CHECK_WITHOUT_ABORT(enrich_root_node_clusters(node));
     }
 
     // add temperature sensor device
