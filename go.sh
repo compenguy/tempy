@@ -29,7 +29,7 @@ MFG_PRODUCT_LABEL="Tempy Temperature Sensor"
 MFG_PRODUCT_URL="https://github.com/compenguy/tempy"
 MFG_HW_VERSION=1
 MFG_HW_VERSION_STRING="SM-H2-280-00"
-MFG_SERIAL_PREFIX="TEMPY"
+# Serial numbers are auto-generated per unit when --serial-num is omitted.
 
 # Where in flash the fctry partition lives. Must match partitions.csv:
 # `fctry, data, nvs, 0x3E0000, 0x6000`. If you ever repartition, update
@@ -227,7 +227,6 @@ function mfg_gen() {
 			--product-url    "${MFG_PRODUCT_URL}" \
 			--hw-ver         "${MFG_HW_VERSION}" \
 			--hw-ver-str     "${MFG_HW_VERSION_STRING}" \
-			--serial-num     "${MFG_SERIAL_PREFIX}-$(date +%Y%m%d%H%M%S)" \
 			--enable-rotating-device-id \
 			--pai \
 			-k  "${MFG_PAI_KEY}" \
