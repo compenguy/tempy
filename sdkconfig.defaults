@@ -58,7 +58,7 @@ CONFIG_DEVICE_PRODUCT_ID=0x8000
 
 # Bump on every OTA-eligible firmware release; Matter OTA only accepts
 # strictly-greater versions than the running image.
-CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=1
+CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=2
 
 # Factory data provider. When enabled, CHIP reads the commissioning
 # passcode/verifier + discriminator, the DAC / PAI, the CD, and (with
