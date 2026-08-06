@@ -49,6 +49,19 @@ NVS_SIZE="0xC000"
 # one artifact in the tree that hurts to lose.
 MFG_OUT_DIR="${SCRIPT_DIR}/mfg"
 
+# Where release-ready Matter OTA images land. Also kept outside build/ so
+# --full-clean / --reconfigure don't wipe binaries that have already been
+# attached to a GitHub release (and thus are the canonical published
+# artifact for a given version tag). Regenerable from build/tempy.bin +
+# the version knobs in sdkconfig, so losing this dir is recoverable.
+OTA_OUT_DIR="${SCRIPT_DIR}/ota"
+
+# CHIP's OTA image tool, part of the CHIP SDK tree. Wraps an ESP32 app
+# binary in a Matter OTA header (VID, PID, SoftwareVersion, digest, ...)
+# so it's consumable by any Matter OTA Provider, including the one that
+# ships in Home Assistant's python-matter-server.
+OTA_IMAGE_TOOL="${ESP_MATTER_DIR}/connectedhomeip/connectedhomeip/src/app/ota_image_tool.py"
+
 function init_esp_idf() {
 	(
 		if ! [ -d "${ESP_IDF_DIR}" ] || ! [ -d "${ESP_IDF_DIR}"/.git ] ; then
@@ -259,6 +272,53 @@ function mfg_flash() {
 	log "Factory partition flashed. Reset the device to pick up new credentials."
 }
 
+# Wrap the current build/tempy.bin into a Matter OTA image. Reads the
+# VID/PID/version from the built sdkconfig -- these are what the running
+# firmware will actually report as its identity, so pinning the image
+# header to them is the authoritative choice (rather than PROJECT_VER_*
+# from CMakeLists.txt, which is a build-time hint). Output lands in
+# ota/tempy-v<version>.ota, ready to attach to a GitHub release or drop
+# straight into python-matter-server's --ota-provider-dir.
+function ota_build() {
+	local sdkconfig="${SCRIPT_DIR}/sdkconfig"
+	local bin="${SCRIPT_DIR}/build/tempy.bin"
+	[ -f "${sdkconfig}" ] || die "No sdkconfig found; run '${SCRIPT_NAME} --reconfigure' first."
+	[ -f "${bin}" ] || die "No firmware image at ${bin}; run '${SCRIPT_NAME} --build' first."
+	[ -f "${OTA_IMAGE_TOOL}" ] \
+		|| die "ota_image_tool.py not found at ${OTA_IMAGE_TOOL}. Is esp-matter checked out?"
+
+	local vid pid ver
+	vid=$(awk -F= '/^CONFIG_DEVICE_VENDOR_ID=/               {print $2}' "${sdkconfig}")
+	pid=$(awk -F= '/^CONFIG_DEVICE_PRODUCT_ID=/              {print $2}' "${sdkconfig}")
+	ver=$(awk -F= '/^CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=/ {print $2}' "${sdkconfig}")
+	[ -n "${vid}" ] && [ -n "${pid}" ] && [ -n "${ver}" ] \
+		|| die "Could not parse VID/PID/version from ${sdkconfig}."
+
+	# Refuse to overwrite an existing image for the same version. Matter
+	# OTA compares software versions numerically, and a version bump in
+	# sdkconfig is the only signal we have that a given .ota is a
+	# distinct release; overwriting silently would poison the release
+	# artifact for that version. Callers who need to rebuild the same
+	# version's image (e.g. metadata-only header tweaks) can delete the
+	# existing file explicitly.
+	mkdir -p "${OTA_OUT_DIR}"
+	local out="${OTA_OUT_DIR}/tempy-v${ver}.ota"
+	if [ -f "${out}" ]; then
+		die "${out} already exists; bump CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER in sdkconfig.defaults or delete the file first."
+	fi
+
+	log "Wrapping ${bin} as Matter OTA image (VID=${vid} PID=${pid} v${ver})..."
+	python3 "${OTA_IMAGE_TOOL}" create \
+		--vendor-id        "${vid}" \
+		--product-id       "${pid}" \
+		--version          "${ver}" \
+		--version-str      "${ver}.0" \
+		--digest-algorithm sha256 \
+		"${bin}" "${out}"
+	log "OTA image written to ${out}"
+	log "Attach this file to a GitHub release; commissioners with a matching VID/PID and lower version will offer the update."
+}
+
 # Erase just the runtime `nvs` partition, forcing the device to forget
 # every commissioned fabric, ACL, subscription, and check-in registration.
 # Leaves the `fctry` partition (per-unit DAC/PAI/CD/passcode) intact, so
@@ -286,6 +346,7 @@ ARG_MFG_GEN_COUNT=1
 ARG_MFG_FLASH=0
 ARG_MFG_FLASH_PATH=""
 ARG_RESET_FABRIC=0
+ARG_OTA=0
 
 # Argument parsing
 usage() {
@@ -316,6 +377,11 @@ Factory-Data Arguments:
       --reset-fabric	erase the runtime NVS partition (fabric table, ACLs,
             		subscriptions) without touching factory credentials or
             		the app image. Prompts for confirmation.
+OTA Arguments:
+      --ota		wrap the current build/tempy.bin as a Matter OTA image
+            		at ota/tempy-v<n>.ota. Requires --build first; refuses
+            		to overwrite an existing file for the same version so
+            		release artifacts stay stable per version tag.
 EOF
 }
 
@@ -369,6 +435,10 @@ while [[ $# -gt 0 ]]; do
 			shift
 			ARG_RESET_FABRIC=1
 			;;
+		--ota)
+			shift
+			ARG_OTA=1
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -388,6 +458,7 @@ BUILD_ACTIVITY=0
 FLASH_ACTIVITY=0
 MONITOR_ACTIVITY=0
 MFG_ACTIVITY=0
+OTA_ACTIVITY=0
 
 activate_esp_idf
 activate_esp_matter
@@ -465,6 +536,11 @@ if [ "${ARG_RESET_FABRIC}" -ne 0 ]; then
 	reset_fabric
 	MFG_ACTIVITY=1
 fi
+if [ "${ARG_OTA}" -ne 0 ]; then
+	log "Building Matter OTA image..."
+	ota_build
+	OTA_ACTIVITY=1
+fi
 if [ "${ARG_MONITOR}" -ne 0 ]; then
 	log "Monitoring device..."
 	(
@@ -477,7 +553,8 @@ fi
 # Wrap-up
 if [[ ${CONFIG_ACTIVITY} -eq 0 ]] && [[ ${RECONFIG_ACTIVITY} -eq 0 ]] \
 	&& [[ ${BUILD_ACTIVITY} -eq 0 ]] && [[ ${FLASH_ACTIVITY} -eq 0 ]] \
-	&& [[ ${MONITOR_ACTIVITY} -eq 0 ]] && [[ ${MFG_ACTIVITY} -eq 0 ]]; then
+	&& [[ ${MONITOR_ACTIVITY} -eq 0 ]] && [[ ${MFG_ACTIVITY} -eq 0 ]] \
+	&& [[ ${OTA_ACTIVITY} -eq 0 ]]; then
 	usage
 	echo ""
 	echo "Nothing to do! Did you mean to specify --menuconfig, --build, --flash, or --monitor?"

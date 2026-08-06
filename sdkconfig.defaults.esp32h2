@@ -85,7 +85,17 @@ CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MAX=160
 CONFIG_ENABLE_WIFI_STATION=n
 
 # Matter configuration
-CONFIG_ENABLE_OTA_REQUESTOR=n
+#
+# Enable the OTA Requestor: registers the OTA Software Update Requestor
+# cluster on the root endpoint and installs the CHIP OTA state machine.
+# Once commissioned to a fabric with an OTA Provider (Home Assistant's
+# python-matter-server exposes one from `--ota-provider-dir`), the device
+# will periodically ask the Provider for images with a strictly-greater
+# CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER and stream a matching one over
+# BDX into the inactive ota_* partition. Costs a few tens of KB of flash
+# and a small runtime footprint; the trade is that a field-deployed
+# sensor becomes updatable without a USB cable.
+CONFIG_ENABLE_OTA_REQUESTOR=y
 CONFIG_ENABLE_EXTENDED_DISCOVERY=y
 
 # ICD configuration

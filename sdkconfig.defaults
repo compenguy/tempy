@@ -46,7 +46,7 @@ CONFIG_BSP_BUTTON_1_LEVEL=0
 # OTA Requestor: opt in per target. Left off in the shared defaults so a new
 # target file doesn't silently inherit the OTA client machinery, which is
 # meaningful RAM/flash on a battery-powered sensor. The esp32h2 target
-# explicitly sets =n; enable per target where OTA is actually wanted.
+# turns it on where OTA is actually wanted.
 
 # Matter device identification.
 #

@@ -167,6 +167,104 @@ $ ./go.sh --build --flash          # app image only; fctry + nvs preserved
 `--flash` never touches the `fctry` partition, so per-unit credentials
 survive firmware updates. Only `--full-flash` (`-F`) wipes the device.
 
+### Firmware updates over Matter (OTA)
+
+The firmware ships with the Matter OTA Requestor cluster enabled, so any
+Matter fabric that also hosts an OTA Provider (Home Assistant's Matter
+integration does) can push firmware updates without a USB cable. Devices
+periodically ask the Provider for an image with a strictly-greater
+`SoftwareVersion` than what they're running, stream a matching image over
+BDX into the inactive `ota_*` partition, verify the sha256 digest that's
+embedded in the OTA header, and reboot into the new image. A failed
+verification or a boot loop on the new partition triggers a rollback via
+`esp_ota_mark_app_invalid_rollback_and_reboot()`.
+
+Producing a release image:
+
+1. Bump `CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER` in `sdkconfig.defaults`.
+   Matter OTA only accepts strictly-greater versions than the running
+   image, so leaving this flat means the update will never be offered.
+2. Rebuild and wrap:
+   ```
+   $ ./go.sh --reconfigure --build   # produces build/tempy.bin at the new version
+   $ ./go.sh --ota                   # writes ota/tempy-v<n>.ota
+   ```
+
+The `.ota` file is a signed Matter OTA header (VID, PID, SoftwareVersion,
+sha256 digest, ...) wrapped around `tempy.bin`. `--ota` refuses to
+overwrite an existing `ota/tempy-v<n>.ota`, so once a version is minted
+its artifact stays stable per tag.
+
+The published release workflow this project follows:
+
+1. Bump `CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER`, commit.
+2. Tag the commit (`git tag v<n> && git push --tags`).
+3. `./go.sh --reconfigure --build --ota`.
+4. Create a GitHub release for the tag; attach `ota/tempy-v<n>.ota` (and,
+   for USB re-flash convenience, `build/tempy.bin`).
+
+Home Assistant's Matter integration exposes an OTA Provider via
+[python-matter-server](https://github.com/home-assistant-libs/python-matter-server).
+On HA OS with the official Matter Server add-on, add the OTA options to
+the add-on configuration:
+
+```yaml
+ota_provider_dir: /media/matter-ota
+```
+
+(For self-hosted `python-matter-server`, pass the equivalent
+`--ota-provider-dir /path/to/matter-ota` on the command line.) Drop the
+`.ota` file into that directory and restart the add-on. Within one
+Requestor query interval (default 24h; the device also re-queries on
+reboot and can be nudged sooner from the HA UI) the sensor will notice
+the newer image and start streaming.
+
+For a hands-off release pipeline, a small script on the HA host can pull
+new `.ota` assets from GitHub releases into the provider dir. Run it on
+a cron or systemd timer:
+
+```bash
+#!/bin/bash
+# tempy-ota-sync -- fetch the latest tempy-v*.ota into HA's provider dir.
+# Idempotent; safe to re-run.
+set -e
+REPO="compenguy/tempy"
+DEST="/root/homeassistant/media/matter-ota"
+mkdir -p "${DEST}"
+url=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+      | jq -r '.assets[] | select(.name | endswith(".ota")) | .browser_download_url')
+[ -n "${url}" ] || { echo "No .ota asset in latest release"; exit 0; }
+name=$(basename "${url}")
+[ -f "${DEST}/${name}" ] && exit 0
+curl -fsSL "${url}" -o "${DEST}/${name}"
+echo "Fetched ${name}"
+# Optional: restart the Matter Server add-on so it re-scans immediately.
+# ha addons restart core_matter_server
+```
+
+Once an image is offered, Home Assistant surfaces an `update.<device>`
+entity you can auto-install with a plain HA automation:
+
+```yaml
+alias: Auto-install Tempy firmware updates
+description: Apply any pending Matter OTA update to the temperature sensor.
+trigger:
+  - platform: state
+    entity_id: update.tempy_temperature_sensor   # rename to match your entity
+    to: "on"                                     # "on" = update available
+action:
+  - service: update.install
+    target:
+      entity_id: update.tempy_temperature_sensor
+mode: single
+```
+
+BDX transfer of a ~1.5 MB image over Thread runs 2-5 min depending on
+RSSI and hops. The requestor holds the ICD in active mode for the
+duration, so battery cost per update is roughly the equivalent of a few
+minutes of un-throttled radio time -- not free, but not something a
+handful of updates a year will meaningfully move on an 18650.
+
 ### Factory reset & re-commissioning
 
 `--reset-fabric` erases just the runtime NVS partition (fabric table, ACLs,
