@@ -71,16 +71,18 @@ Configure, build, and flash the app image. This is what changes on every code
 change; the layout of the device's flash otherwise stays the same.
 
 ```
-$ ./go.sh --menuconfig        # first-run configuration (optional)
-$ ./go.sh --reconfigure       # picks up sdkconfig.defaults changes
+$ ./go.sh --menuconfig        # interactive Kconfig tweaks (optional)
+$ ./go.sh --reconfigure       # regenerate sdkconfig from sdkconfig.defaults*
 $ ./go.sh --build             # produces build/tempy.bin
 $ ./go.sh --flash --monitor   # writes the app; opens serial console
 ```
 
-`--full-flash` (`-F`) is the "erase everything and start over" variant. Use it
-when the partition table changes or when a stale bootloader is suspected. It
-also erases the factory-data partition, so a `--mfg-flash` pass is needed
-before the device can be commissioned again.
+`--reconfigure` regenerates `sdkconfig` from scratch and discards any
+interactive `--menuconfig` changes; re-run `--menuconfig` after to reapply
+those. `--full-flash` (`-F`) is the "erase everything and start over"
+variant. Use it when the partition table changes or when a stale bootloader
+is suspected. It also erases the factory-data partition, so a `--mfg-flash`
+pass is needed before the device can be commissioned again.
 
 ### Per-unit factory data
 

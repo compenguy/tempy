@@ -294,7 +294,7 @@ General Arguments:
 Configuration Arguments:
       --full-clean	invoke idf.py fullclean
   -c, --menuconfig	invoke idf.py menuconfig
-  -r, --reconfigure	invoke idf.py reconfigure
+  -r, --reconfigure	regenerate sdkconfig from sdkconfig.defaults*
 Build Arguments:
   -b, --build		invoke idf.py to build the specified target
 Programming Arguments:
@@ -411,10 +411,14 @@ if [ "${ARG_CONFIG}" -ne 0 ]; then
 	CONFIG_ACTIVITY=1
 fi
 if [ "${ARG_RECONFIG}" -ne 0 ]; then
-	log "Reconfiguring project..."
+	log "Reconfiguring project from sdkconfig.defaults*..."
 	(
 		cd "${SCRIPT_DIR}"
-		idf.py reconfigure
+		# `idf.py reconfigure` keeps an existing sdkconfig, silently
+		# ignoring updated defaults; deleting it and re-running
+		# set-target re-seeds from sdkconfig.defaults + .<target>.
+		rm -f sdkconfig
+		idf.py set-target "${ESP_TARGET}"
 	)
 	RECONFIG_ACTIVITY=1
 fi
