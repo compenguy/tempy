@@ -51,7 +51,7 @@ using namespace chip::app::Clusters;
 static void matter_temp_sensor_notification(uint16_t endpoint_id, float temp)
 {
     // Schedule the attribute update onto the Matter thread. ScheduleLambda is
-    // thread-safe, so we intentionally do not take chip_stack_lock here.
+    // thread-safe, so we intentionally do not take the CHIP stack lock here.
     chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id, temp]() {
         attribute_t *attribute = attribute::get(endpoint_id,
                                                 TemperatureMeasurement::Id,
@@ -173,18 +173,15 @@ static bool reading_changed_enough(float new_val, float last_val, float hysteres
 // created or torn down, so we take the CHIP stack lock while querying.
 static bool has_matter_subscribers(void)
 {
-    lock::status_t lock_rc = lock::chip_stack_lock(portMAX_DELAY);
-    if (lock_rc == lock::FAILED) {
-        ESP_LOGW(TAG_BME280, "Could not take CHIP stack lock; assuming no subscribers");
-        return false;
-    }
-    bool subscribed = chip::app::InteractionModelEngine::GetInstance()
-                          ->GetNumActiveReadHandlers(
-                              chip::app::ReadHandler::InteractionType::Subscribe) > 0;
-    if (lock_rc == lock::SUCCESS) {
-        lock::chip_stack_unlock();
-    }
-    return subscribed;
+    // RAII scope lock: acquires the CHIP stack mutex on construction and
+    // releases it on destruction, tolerating both SUCCESS and
+    // ALREADY_TAKEN (reentrant) cases automatically. portMAX_DELAY means
+    // the take blocks indefinitely, so FAILED is not reachable here in
+    // practice; if we ever bound the wait, the wrapper still skips the
+    // unlock on failure so nothing leaks.
+    lock::ScopedChipStackLock chip_lock(portMAX_DELAY);
+    return chip::app::InteractionModelEngine::GetInstance()
+        ->GetNumActiveReadHandlers(chip::app::ReadHandler::InteractionType::Subscribe) > 0;
 }
 
 // Retry parameters for transient I2C failures. A single failure will
