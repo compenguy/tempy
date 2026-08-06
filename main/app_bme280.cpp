@@ -94,6 +94,28 @@ static void matter_humidity_sensor_notification(uint16_t endpoint_id, float humi
     });
 }
 
+// Push null to the temperature MeasuredValue. The attribute is nullable per
+// the Matter Application Cluster spec, so pushing null tells subscribers
+// "reading unavailable" rather than leaving stale data on the wire.
+static void matter_temp_sensor_notification_null(uint16_t endpoint_id)
+{
+    chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id]() {
+        esp_matter_attr_val_t val = esp_matter_nullable_int16(nullable<int16_t>());
+        attribute::update(endpoint_id, TemperatureMeasurement::Id,
+                          TemperatureMeasurement::Attributes::MeasuredValue::Id, &val);
+    });
+}
+
+// Push null to the humidity MeasuredValue. See temperature counterpart.
+static void matter_humidity_sensor_notification_null(uint16_t endpoint_id)
+{
+    chip::DeviceLayer::SystemLayer().ScheduleLambda([endpoint_id]() {
+        esp_matter_attr_val_t val = esp_matter_nullable_uint16(nullable<uint16_t>());
+        attribute::update(endpoint_id, RelativeHumidityMeasurement::Id,
+                          RelativeHumidityMeasurement::Attributes::MeasuredValue::Id, &val);
+    });
+}
+
 static esp_err_t i2c_master_init(void)
 {
     // Create I2C master bus
@@ -177,6 +199,12 @@ static bool has_matter_subscribers(void)
 static void task_bme280_forced_mode(void *ignore)
 {
     float t, h;
+    // Track how many read cycles in a row have failed and whether we have
+    // already emitted null to Matter for the current outage. Nulling once
+    // (rather than every cycle) keeps us from repeatedly waking the Thread
+    // radio while the sensor is offline. See CONFIG_TEMPY_NULL_AFTER_FAILED_CYCLES.
+    unsigned consecutive_failed_cycles = 0;
+    bool reported_null = false;
     // Allow some time for the Matter thread to finish initializing before
     // scheduling the first attribute update. (See init-order comment in
     // bme280_app_init below for why this delay is needed.)
@@ -193,6 +221,18 @@ static void task_bme280_forced_mode(void *ignore)
             vTaskDelay(pdMS_TO_TICKS(BME280_READ_RETRY_DELAY_MS));
         }
         if (err == ESP_OK) {
+            // Recovery path: if we had previously reported null, clear the
+            // hysteresis-tracking state so this first good reading is
+            // treated as a fresh seed and hits the wire immediately,
+            // regardless of how close it is to the pre-outage value.
+            if (reported_null) {
+                ESP_LOGI(TAG_BME280, "Sensor recovered after %u failed cycles", consecutive_failed_cycles);
+                last_reported_temp = NAN;
+                last_reported_humidity = NAN;
+                reported_null = false;
+            }
+            consecutive_failed_cycles = 0;
+
             ESP_LOGD(TAG_BME280, "Temperature: %.2f C", t);
             ESP_LOGD(TAG_BME280, "Humidity:    %.1f %%RH", h);
 
@@ -239,8 +279,21 @@ static void task_bme280_forced_mode(void *ignore)
                 ESP_LOGD(TAG_BME280, "Humidity unchanged (%.1f %%RH), skipping update", h);
             }
         } else {
-            ESP_LOGW(TAG_BME280, "Read failed after %d attempts: %s",
-                     BME280_READ_MAX_ATTEMPTS, esp_err_to_name(err));
+            ++consecutive_failed_cycles;
+            ESP_LOGW(TAG_BME280, "Read failed after %d attempts: %s (%u consecutive cycles)",
+                     BME280_READ_MAX_ATTEMPTS, esp_err_to_name(err), consecutive_failed_cycles);
+            // Push null exactly once per outage, right when we cross the
+            // threshold. Repeating the null every cycle would wake the
+            // Thread radio for no incremental information.
+            if (!reported_null && consecutive_failed_cycles >= CONFIG_TEMPY_NULL_AFTER_FAILED_CYCLES) {
+                ESP_LOGW(TAG_BME280, "Reporting sensor unavailable to Matter after %u consecutive failures",
+                         consecutive_failed_cycles);
+                matter_temp_sensor_notification_null(temp_endpoint_id);
+                matter_humidity_sensor_notification_null(humidity_endpoint_id);
+                last_reported_temp = NAN;
+                last_reported_humidity = NAN;
+                reported_null = true;
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(CONFIG_TEMPY_DELAY_BETWEEN_SENSOR_READINGS_MS));
     }

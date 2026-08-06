@@ -59,4 +59,19 @@ menu "Tempy Configuration"
              means 1.0 %RH). A value of 0 disables hysteresis. See the
             temperature hysteresis help for further discussion.
 
+    config TEMPY_NULL_AFTER_FAILED_CYCLES
+        int "Emit null MeasuredValue after this many consecutive failed read cycles"
+        default 5
+        range 1 1000
+        help
+            Number of consecutive full read cycles (each of which includes
+            the in-loop bus retries) that must fail before we push a null
+            to Matter's temperature and humidity MeasuredValue attributes.
+            Nulling makes controllers render "unavailable" rather than
+            fossilizing the last-good reading. At the default read
+            interval of 60 seconds this is ~5 minutes; scale accordingly
+            if you tune DELAY_BETWEEN_SENSOR_READINGS_MS. On the next
+            successful reading, the attributes are reseeded with the fresh
+            value regardless of hysteresis.
+
 endmenu
