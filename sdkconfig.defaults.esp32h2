@@ -132,3 +132,7 @@ CONFIG_BSP_BUTTONS_NUM=1
 CONFIG_BSP_BUTTON_1_TYPE_GPIO=y
 CONFIG_BSP_BUTTON_1_GPIO=9
 CONFIG_BSP_BUTTON_1_LEVEL=0
+
+# Hardware revision of the H2-based Tempy PCB. Bump on physical board
+# changes (new pinout, different sensor, etc.), not on firmware changes.
+CONFIG_DEFAULT_DEVICE_HARDWARE_VERSION=1

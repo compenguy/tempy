@@ -47,3 +47,49 @@ CONFIG_BSP_BUTTON_1_LEVEL=0
 # target file doesn't silently inherit the OTA client machinery, which is
 # meaningful RAM/flash on a battery-powered sensor. The esp32h2 target
 # explicitly sets =n; enable per target where OTA is actually wanted.
+
+# Matter device identification.
+#
+# VID/PID are the ESP-Matter test defaults (Kconfig defaults would set the
+# same values) but pinned here so the intent is explicit. Real CSA-issued
+# VID would go here when/if we ever get one.
+CONFIG_DEVICE_VENDOR_ID=0xFFF1
+CONFIG_DEVICE_PRODUCT_ID=0x8000
+
+# Bump on every OTA-eligible firmware release; Matter OTA only accepts
+# strictly-greater versions than the running image.
+CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=1
+
+# Factory data provider. When enabled, CHIP reads the commissioning
+# passcode/verifier + discriminator, the DAC / PAI, the CD, and (with
+# INSTANCE_INFO_PROVIDER below) the vendor/product/serial/HW-version/etc.
+# strings from an NVS namespace called `chip-factory` inside the partition
+# named by CHIP_FACTORY_NAMESPACE_PARTITION_LABEL. Without this, all of
+# those come from CHIP's compile-time test defaults ("TEST_VENDOR",
+# passcode 20202021, discriminator 3840, test DAC/PAI/CD), which is fine
+# for bring-up but not what you want for anything that leaves the desk.
+# The factory partition itself is baked per-unit by esp-matter-mfg-tool
+# (see go.sh --mfg-gen) and flashed to the fctry offset in partitions.csv.
+CONFIG_ENABLE_ESP32_FACTORY_DATA_PROVIDER=y
+CONFIG_ENABLE_ESP32_DEVICE_INSTANCE_INFO_PROVIDER=y
+
+# Point the factory-data lookup at the dedicated `fctry` NVS partition
+# from partitions.csv rather than the main `nvs` partition that CHIP
+# uses for runtime state (fabric table, ACLs, subscriptions, etc.).
+# Keeping factory data physically separate means:
+#   1. Erasing runtime state (see go.sh --reset-fabric) doesn't wipe
+#      the per-unit credentials, so a factory reset from the field
+#      doesn't force a re-provisioning pass.
+#   2. `esptool.py erase_region 0x3E0000 0x6000` targets just the
+#      factory data without touching the app or fabric state.
+#   3. The application's chip-config namespace lives in `nvs` unchanged.
+CONFIG_CHIP_FACTORY_NAMESPACE_PARTITION_LABEL="fctry"
+
+# Explicitly pick the Factory-backed implementations of the DAC /
+# commissionable data / instance info providers over the built-in
+# test ones. These are also the choice-group defaults when the two
+# ENABLE_* options above are on, but spelling them out means the
+# intent survives a future esp-matter update that tweaks defaults.
+CONFIG_FACTORY_PARTITION_DAC_PROVIDER=y
+CONFIG_FACTORY_COMMISSIONABLE_DATA_PROVIDER=y
+CONFIG_FACTORY_DEVICE_INSTANCE_INFO_PROVIDER=y
